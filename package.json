@@ -1,0 +1,29 @@
+{
+  "name": "cc-costline",
+  "version": "0.1.0",
+  "description": "Enhanced statusline for Claude Code with 7d/30d cost tracking",
+  "type": "module",
+  "bin": {
+    "cc-costline": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "keywords": [
+    "claude-code",
+    "statusline",
+    "cost-tracking"
+  ],
+  "author": "ventuss",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.7.0"
+  }
+}
