@@ -1,7 +1,7 @@
 {
   "name": "cc-costline",
-  "version": "0.1.1",
-  "description": "Enhanced statusline for Claude Code with 7d/30d cost tracking",
+  "version": "0.2.0",
+  "description": "Enhanced statusline for Claude Code with cost tracking, usage limits, and leaderboard",
   "type": "module",
   "bin": {
     "cc-costline": "dist/cli.js"
@@ -24,6 +24,6 @@
   "author": "ventuss",
   "license": "MIT",
   "devDependencies": {
-    "typescript": "^5.7.0"
+    "typescript": "^5.9.3"
   }
 }
