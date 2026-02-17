@@ -155,11 +155,11 @@ export function render(input: string): string {
   const parts: string[] = [];
 
   // 1. Tokens ~ cost / context % + model
-  parts.push(`${FG_GRAY_DIM}↯ ${formatTokens(totalTokens)}${RESET} ${FG_GRAY_DIM}~${RESET} ${FG_YELLOW}${formatCost(cost)}${RESET} ${FG_GRAY_DIM}/${RESET} ${ctxColor(contextPct)}${contextPct}%${RESET} ${FG_GRAY_DIM}by${RESET} ${FG_MODEL}${model}${RESET}`);
+  parts.push(`${FG_GRAY_DIM}∫ ${formatTokens(totalTokens)}${RESET} ${FG_GRAY_DIM}~${RESET} ${FG_YELLOW}${formatCost(cost)}${RESET} ${FG_GRAY_DIM}/${RESET} ${ctxColor(contextPct)}${contextPct}%${RESET} ${FG_GRAY_DIM}by${RESET} ${FG_MODEL}${model}${RESET}`);
 
   // 2. Claude usage limits (colored by utilization)
   if (claudeUsage) {
-    parts.push(`${FG_GRAY_DIM}⧖${RESET} ${ctxColor(claudeUsage.fiveHour)}5h: ${claudeUsage.fiveHour}%${RESET} ${FG_GRAY_DIM}/${RESET} ${ctxColor(claudeUsage.sevenDay)}7d: ${claudeUsage.sevenDay}%${RESET}`);
+    parts.push(`${FG_GRAY_DIM}∝${RESET} ${ctxColor(claudeUsage.fiveHour)}5h: ${claudeUsage.fiveHour}%${RESET} ${FG_GRAY_DIM}/${RESET} ${ctxColor(claudeUsage.sevenDay)}7d: ${claudeUsage.sevenDay}%${RESET}`);
   }
 
   // 3. Period cost (default 30d, configurable)
@@ -173,7 +173,7 @@ export function render(input: string): string {
   const ccclubRank = getCcclubRank();
   if (ccclubRank) {
     const rc = rankColor(ccclubRank.rank);
-    parts.push(`${rc}♔ #${ccclubRank.rank}/${ccclubRank.total} ${formatCost(ccclubRank.cost)}${RESET}`);
+    parts.push(`${rc}Ω #${ccclubRank.rank}/${ccclubRank.total} ${formatCost(ccclubRank.cost)}${RESET}`);
   }
 
   return "\n " + parts.join(` ${FG_GRAY}|${RESET} `) + "\n";
