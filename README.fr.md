@@ -1,0 +1,93 @@
+[English](README.md) | [中文](README.zh-CN.md) | [日本語](README.ja.md) | [Español](README.es.md)
+
+# cc-costline
+
+Statusline enrichie pour [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — ajoute le suivi des coûts, les limites d'utilisation et le classement dans votre terminal.
+
+![Capture d'écran cc-costline](screenshot.png)
+
+```
+14.6k ~ $2.42 / 40% by Opus 4.6 | 5h: 45% / 7d: 8% | 30d: $866 | #2/22 $67.0
+```
+
+## Installation
+
+```bash
+npm i -g cc-costline && cc-costline install
+```
+
+Ouvrez une nouvelle session Claude Code et la statusline enrichie apparaîtra. Nécessite Node.js >= 22.
+
+## Fonctionnalités
+
+| Segment | Exemple | Description |
+|---------|---------|-------------|
+| Tokens ~ Coût / Contexte | `14.6k ~ $2.42 / 40% by Opus 4.6` | Nombre de tokens, coût, utilisation du contexte et modèle |
+| Limites d'utilisation | `5h: 45% / 7d: 8%` | Utilisation Claude sur 5 heures et 7 jours (colorée comme le contexte) |
+| Coût périodique | `30d: $866` | Coût cumulé glissant (configurable : 7j ou 30j) |
+| Classement | `#2/22 $67.0` | Rang [ccclub](https://github.com/mazzzystar/ccclub) (si installé) |
+
+### Couleurs
+
+- **Contexte et limites** — vert (< 60 %) → orange (60-79 %) → rouge (≥ 80 %)
+- **Rang au classement** — 1er : or, 2e : blanc, 3e : orange, autres : bleu
+- **Coût périodique** — jaune
+
+### Intégrations optionnelles
+
+- **Limites d'utilisation Claude** — lit automatiquement les identifiants OAuth depuis le trousseau macOS. Il suffit de lancer `claude login`.
+- **Classement ccclub** — installez [ccclub](https://github.com/mazzzystar/ccclub) (`npm i -g ccclub && ccclub init`). Le rang s'affiche automatiquement.
+
+Les deux fonctionnent sans configuration : si indisponibles, le segment est masqué silencieusement.
+
+## Commandes
+
+```bash
+cc-costline install              # Configurer l'intégration Claude Code
+cc-costline uninstall            # Supprimer des paramètres
+cc-costline refresh              # Recalculer manuellement le cache des coûts
+cc-costline config --period 30d  # Afficher le coût sur 30 jours (par défaut)
+cc-costline config --period 7d   # Afficher le coût sur 7 jours
+```
+
+## Fonctionnement
+
+1. `install` configure `~/.claude/settings.json` — définit la commande statusline et ajoute des hooks de fin de session pour le rafraîchissement automatique. Vos paramètres existants sont préservés.
+2. `render` lit le JSON stdin de Claude Code et le cache des coûts, puis produit la statusline formatée.
+3. `refresh` parcourt `~/.claude/projects/**/*.jsonl`, extrait l'utilisation des tokens, applique la tarification par modèle et écrit dans `~/.cc-costline/cache.json`.
+4. L'utilisation Claude est récupérée depuis `api.anthropic.com/api/oauth/usage` avec un cache fichier de 60 s dans `/tmp/sl-claude-usage`.
+5. Le rang ccclub est récupéré depuis `ccclub.dev/api/rank` avec un cache fichier de 120 s dans `/tmp/sl-ccclub-rank`.
+
+<details>
+<summary>Grille tarifaire</summary>
+
+Prix par million de tokens (USD) :
+
+| Modèle | Entrée | Sortie | Écriture cache | Lecture cache |
+|--------|-------:|-------:|---------------:|--------------:|
+| Opus 4.6 | 5 $ | 25 $ | 6,25 $ | 0,50 $ |
+| Opus 4.5 | 5 $ | 25 $ | 6,25 $ | 0,50 $ |
+| Opus 4.1 | 15 $ | 75 $ | 18,75 $ | 1,50 $ |
+| Sonnet 4.5 | 3 $ | 15 $ | 3,75 $ | 0,30 $ |
+| Sonnet 4 | 3 $ | 15 $ | 3,75 $ | 0,30 $ |
+| Haiku 4.5 | 1 $ | 5 $ | 1,25 $ | 0,10 $ |
+| Haiku 3.5 | 0,80 $ | 4 $ | 1,00 $ | 0,08 $ |
+
+Les modèles inconnus utilisent le prix de leur famille, Sonnet par défaut.
+
+</details>
+
+## Désinstallation
+
+```bash
+cc-costline uninstall
+npm uninstall -g cc-costline
+```
+
+## Remerciements
+
+- [ccclub](https://github.com/mazzzystar/ccclub) par 碎瓜 ([@mazzzystar](https://github.com/mazzzystar)) — classement Claude Code entre amis
+
+## Licence
+
+MIT

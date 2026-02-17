@@ -1,3 +1,5 @@
+[中文](README.zh-CN.md) | [日本語](README.ja.md) | [Français](README.fr.md) | [Español](README.es.md)
+
 # cc-costline
 
 Enhanced statusline for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — adds cost tracking, usage limits, and leaderboard rank to your terminal.

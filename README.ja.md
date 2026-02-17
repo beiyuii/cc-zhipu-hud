@@ -1,0 +1,93 @@
+[English](README.md) | [中文](README.zh-CN.md) | [Français](README.fr.md) | [Español](README.es.md)
+
+# cc-costline
+
+[Claude Code](https://docs.anthropic.com/en/docs/claude-code) 向けの拡張ステータスライン — コスト追跡、使用制限、リーダーボードランキングをターミナルに表示します。
+
+![cc-costline スクリーンショット](screenshot.png)
+
+```
+14.6k ~ $2.42 / 40% by Opus 4.6 | 5h: 45% / 7d: 8% | 30d: $866 | #2/22 $67.0
+```
+
+## インストール
+
+```bash
+npm i -g cc-costline && cc-costline install
+```
+
+新しい Claude Code セッションを開くと、拡張ステータスラインが表示されます。Node.js >= 22 が必要です。
+
+## 機能
+
+| セグメント | 例 | 説明 |
+|-----------|---|------|
+| トークン ~ コスト / コンテキスト | `14.6k ~ $2.42 / 40% by Opus 4.6` | セッションのトークン数、コスト、コンテキスト使用率、モデル |
+| 使用制限 | `5h: 45% / 7d: 8%` | Claude の 5 時間・7 日間の使用率（コンテキストと同じ色分け） |
+| 期間コスト | `30d: $866` | ローリングコスト合計（7d または 30d で設定可能） |
+| リーダーボード | `#2/22 $67.0` | [ccclub](https://github.com/mazzzystar/ccclub) ランキング（インストール時） |
+
+### カラールール
+
+- **コンテキスト・使用制限** — 緑（< 60%）→ オレンジ（60-79%）→ 赤（≥ 80%）
+- **リーダーボードランク** — 1 位：ゴールド、2 位：ホワイト、3 位：オレンジ、その他：ブルー
+- **期間コスト** — イエロー
+
+### オプション連携
+
+- **Claude 使用制限** — macOS キーチェーンから OAuth 認証情報を自動で読み取ります。`claude login` するだけで動作します。
+- **ccclub リーダーボード** — [ccclub](https://github.com/mazzzystar/ccclub) をインストール（`npm i -g ccclub && ccclub init`）すると、ランキングが自動表示されます。
+
+どちらもゼロ設定：利用できない場合、該当セグメントは静かに非表示になります。
+
+## コマンド
+
+```bash
+cc-costline install              # Claude Code 連携のセットアップ
+cc-costline uninstall            # 設定から削除
+cc-costline refresh              # コストキャッシュを手動再計算
+cc-costline config --period 30d  # 30 日間のコストを表示（デフォルト）
+cc-costline config --period 7d   # 7 日間のコストを表示
+```
+
+## 仕組み
+
+1. `install` は `~/.claude/settings.json` を設定 — ステータスラインコマンドとセッション終了フックを追加します。既存の設定は保持されます。
+2. `render` は Claude Code の stdin JSON とコストキャッシュを読み取り、フォーマットされたステータスラインを出力します。
+3. `refresh` は `~/.claude/projects/**/*.jsonl` をスキャンし、トークン使用量を抽出、モデル別価格を適用して `~/.cc-costline/cache.json` に書き込みます。
+4. Claude 使用率は `api.anthropic.com/api/oauth/usage` から取得され、60 秒のファイルキャッシュが `/tmp/sl-claude-usage` に保存されます。
+5. ccclub ランキングは `ccclub.dev/api/rank` から取得され、120 秒のファイルキャッシュが `/tmp/sl-ccclub-rank` に保存されます。
+
+<details>
+<summary>料金表</summary>
+
+100 万トークンあたりの価格（USD）：
+
+| モデル | 入力 | 出力 | キャッシュ書込 | キャッシュ読取 |
+|--------|-----:|-----:|-------------:|-------------:|
+| Opus 4.6 | $5 | $25 | $6.25 | $0.50 |
+| Opus 4.5 | $5 | $25 | $6.25 | $0.50 |
+| Opus 4.1 | $15 | $75 | $18.75 | $1.50 |
+| Sonnet 4.5 | $3 | $15 | $3.75 | $0.30 |
+| Sonnet 4 | $3 | $15 | $3.75 | $0.30 |
+| Haiku 4.5 | $1 | $5 | $1.25 | $0.10 |
+| Haiku 3.5 | $0.80 | $4 | $1.00 | $0.08 |
+
+不明なモデルはファミリー名でフォールバックし、デフォルトで Sonnet の価格が適用されます。
+
+</details>
+
+## アンインストール
+
+```bash
+cc-costline uninstall
+npm uninstall -g cc-costline
+```
+
+## 謝辞
+
+- [ccclub](https://github.com/mazzzystar/ccclub) by 碎瓜 ([@mazzzystar](https://github.com/mazzzystar)) — Claude Code フレンドリーダーボード
+
+## ライセンス
+
+MIT
