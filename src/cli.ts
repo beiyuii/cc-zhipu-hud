@@ -184,10 +184,10 @@ Commands:
   render      Output statusline (reads stdin from Claude Code)
 
 Examples:
-  npx @ventuss/cc-costline install
-  npx @ventuss/cc-costline config --period 7d
-  npx @ventuss/cc-costline config --period 30d
-  npx @ventuss/cc-costline config --period both
-  npx @ventuss/cc-costline refresh`);
+  cc-costline install
+  cc-costline config --period 7d
+  cc-costline config --period 30d
+  cc-costline config --period both
+  cc-costline refresh`);
     break;
 }
