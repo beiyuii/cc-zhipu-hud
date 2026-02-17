@@ -2,6 +2,8 @@
 
 Enhanced statusline for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — adds cost tracking, usage limits, and leaderboard rank to your terminal.
 
+![cc-costline screenshot](screenshot.png)
+
 ```
 14.6k ~ $2.42 / 40% by Opus 4.6 | 5h: 45% / 7d: 8% | 30d: $866 | #2/22 $67.0
 ```
@@ -21,7 +23,7 @@ Open a new Claude Code session and you'll see the enhanced statusline. Requires 
 | Tokens ~ Cost / Context | `14.6k ~ $2.42 / 40% by Opus 4.6` | Session token count, cost, context usage, and model |
 | Usage limits | `5h: 45% / 7d: 8%` | Claude 5-hour and 7-day utilization (auto-colored like context) |
 | Period cost | `30d: $866` | Rolling cost total (configurable: 7d or 30d) |
-| Leaderboard | `#2/22 $67.0` | [ccclub](https://github.com/mfbx9da4/ccclub) rank (if installed) |
+| Leaderboard | `#2/22 $67.0` | [ccclub](https://github.com/mazzzystar/ccclub) rank (if installed) |
 
 ### Colors
 
@@ -32,7 +34,7 @@ Open a new Claude Code session and you'll see the enhanced statusline. Requires 
 ### Optional integrations
 
 - **Claude usage limits** — reads OAuth credentials from macOS Keychain automatically. Just `claude login` and it works.
-- **ccclub leaderboard** — install [ccclub](https://github.com/mfbx9da4/ccclub) (`npm i -g ccclub && ccclub init`). Rank appears automatically.
+- **ccclub leaderboard** — install [ccclub](https://github.com/mazzzystar/ccclub) (`npm i -g ccclub && ccclub init`). Rank appears automatically.
 
 Both are zero-config: if not available, the segment is silently omitted.
 
@@ -79,6 +81,10 @@ Unknown models fall back by family name, defaulting to Sonnet pricing.
 cc-costline uninstall
 npm uninstall -g cc-costline
 ```
+
+## Acknowledgments
+
+- [ccclub](https://github.com/mazzzystar/ccclub) by 碎瓜 ([@mazzzystar](https://github.com/mazzzystar)) — Claude Code leaderboard among friends
 
 ## License
 
