@@ -152,29 +152,41 @@ export function render(input: string): string {
   const cache = readCache();
   const config = readConfig();
   const claudeUsage = getClaudeUsage();
-  const parts: string[] = [];
+  const g = FG_GRAY_DIM;
+  const y = FG_YELLOW;
+  const m = FG_MODEL;
+  const gr = FG_GRAY;
+  const r = RESET;
+  const cx = ctxColor(contextPct);
 
-  // 1. Tokens ~ cost / context % + model
-  parts.push(`${FG_GRAY_DIM}∫ ${formatTokens(totalTokens)}${RESET} ${FG_GRAY_DIM}~${RESET} ${FG_YELLOW}${formatCost(cost)}${RESET} ${FG_GRAY_DIM}/${RESET} ${ctxColor(contextPct)}${contextPct}%${RESET} ${FG_GRAY_DIM}by${RESET} ${FG_MODEL}${model}${RESET}`);
+  const segments: string[] = [];
 
-  // 2. Claude usage limits (colored by utilization)
+  // tokens $cost · ctx% Model
+  segments.push(`${formatTokens(totalTokens)} ${y}${formatCost(cost)}${r} ${g}·${r} ${cx}${contextPct}%${r} ${m}${model}${r}`);
+
+  // 5h:100% · 7d:26% · 30d:$960
+  const usageParts: string[] = [];
   if (claudeUsage) {
-    parts.push(`${FG_GRAY_DIM}∝${RESET} ${ctxColor(claudeUsage.fiveHour)}5h: ${claudeUsage.fiveHour}%${RESET} ${FG_GRAY_DIM}/${RESET} ${ctxColor(claudeUsage.sevenDay)}7d: ${claudeUsage.sevenDay}%${RESET}`);
+    const c5 = ctxColor(claudeUsage.fiveHour);
+    const c7 = ctxColor(claudeUsage.sevenDay);
+    usageParts.push(`${c5}5h:${claudeUsage.fiveHour}%${r}`);
+    usageParts.push(`${c7}7d:${claudeUsage.sevenDay}%${r}`);
   }
-
-  // 3. Period cost (default 30d, configurable)
   if (cache) {
     const period = config.period || "30d";
     const periodCost = period === "7d" ? cache.cost7d : cache.cost30d;
-    parts.push(`${FG_YELLOW}Σ ${period}: ${formatCost(periodCost)}${RESET}`);
+    usageParts.push(`${y}${period}:${formatCost(periodCost)}${r}`);
+  }
+  if (usageParts.length > 0) {
+    segments.push(usageParts.join(` ${g}·${r} `));
   }
 
-  // 4. ccclub rank (colored by position)
+  // #2 $53.6
   const ccclubRank = getCcclubRank();
   if (ccclubRank) {
     const rc = rankColor(ccclubRank.rank);
-    parts.push(`${rc}Ω #${ccclubRank.rank}/${ccclubRank.total} ${formatCost(ccclubRank.cost)}${RESET}`);
+    segments.push(`${rc}#${ccclubRank.rank} ${formatCost(ccclubRank.cost)}${r}`);
   }
 
-  return "\n " + parts.join(` ${FG_GRAY}|${RESET} `) + "\n";
+  return " " + segments.join(` ${gr}/${r} `);
 }
