@@ -1,4 +1,4 @@
-import { readFileSync, existsSync, statSync, writeFileSync } from "node:fs";
+import { readFileSync, existsSync, statSync, writeFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { execSync } from "node:child_process";
@@ -16,23 +16,32 @@ const FG_CYAN      = "\x1b[38;5;109m";
 const FG_WHITE     = "\x1b[38;5;255m";
 const RESET        = "\x1b[0m";
 
-function formatTokens(t: number): string {
+export function formatTokens(t: number): string {
   if (t >= 1_000_000) return (t / 1_000_000).toFixed(1) + "M";
   if (t >= 1_000) return (t / 1_000).toFixed(1) + "k";
   return String(t);
 }
 
-function formatCost(n: number): string {
+export function formatCost(n: number): string {
   if (n >= 1000) return "$" + Math.round(n).toLocaleString("en-US");
   if (n >= 100) return "$" + n.toFixed(0);
   if (n >= 10) return "$" + n.toFixed(1);
   return "$" + n.toFixed(2);
 }
 
-function ctxColor(pct: number): string {
+export function ctxColor(pct: number): string {
   if (pct >= 80) return FG_RED;
   if (pct >= 60) return FG_ORANGE;
   return FG_GREEN;
+}
+
+export function formatCountdown(resetsAtMs: number): string {
+  const remainingMs = resetsAtMs - Date.now();
+  if (remainingMs <= 0) return "~0:00";
+  const totalMinutes = Math.ceil(remainingMs / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return `-${hours}:${String(minutes).padStart(2, "0")}`;
 }
 
 // ccclub rank fetcher with 120s file cache
@@ -70,7 +79,7 @@ function getCcclubRank(): { rank: number; total: number; cost: number } | null {
   }
 }
 
-function rankColor(rank: number): string {
+export function rankColor(rank: number): string {
   if (rank === 1) return FG_YELLOW;
   if (rank === 2) return FG_WHITE;
   if (rank === 3) return FG_ORANGE;
@@ -78,12 +87,14 @@ function rankColor(rank: number): string {
 }
 
 // Claude usage fetcher with 60s file cache
-function getClaudeUsage(): { fiveHour: number; sevenDay: number } | null {
+function getClaudeUsage(): { fiveHour: number; sevenDay: number; fiveHourResetsAt?: number } | null {
   const cacheFile = "/tmp/sl-claude-usage";
-  const now = Date.now() / 1000;
+  const hitFile = "/tmp/sl-claude-usage-hit";
+  const now = Date.now();
+  const nowSec = now / 1000;
   if (existsSync(cacheFile)) {
     const mtime = statSync(cacheFile).mtimeMs / 1000;
-    if (now - mtime <= 60) {
+    if (nowSec - mtime <= 60) {
       try {
         return JSON.parse(readFileSync(cacheFile, "utf-8"));
       } catch { }
@@ -109,7 +120,38 @@ function getClaudeUsage(): { fiveHour: number; sevenDay: number } | null {
       if (typeof val === "string") return Math.round(parseFloat(val.replace("%", "")));
       return 0;
     };
-    const result = { fiveHour: parseUtil(data.five_hour?.utilization), sevenDay: parseUtil(data.seven_day?.utilization) };
+    const fiveHour = parseUtil(data.five_hour?.utilization);
+    const sevenDay = parseUtil(data.seven_day?.utilization);
+
+    let fiveHourResetsAt: number | undefined;
+
+    // Strategy 1: Use reset time from API if available
+    const resetsAtRaw = data.five_hour?.resets_at ?? data.five_hour?.reset_at ?? data.five_hour?.next_reset;
+    if (resetsAtRaw) {
+      const ts = typeof resetsAtRaw === "string" ? new Date(resetsAtRaw).getTime() : resetsAtRaw * 1000;
+      if (!isNaN(ts) && ts > now) fiveHourResetsAt = ts;
+    }
+
+    // Strategy 2: Fallback - track when we first saw 100%
+    if (fiveHour >= 100) {
+      if (!fiveHourResetsAt) {
+        if (existsSync(hitFile)) {
+          const hitTime = parseFloat(readFileSync(hitFile, "utf-8").trim());
+          if (!isNaN(hitTime)) {
+            fiveHourResetsAt = hitTime + 5 * 3600 * 1000;
+          }
+        } else {
+          writeFileSync(hitFile, String(now), "utf-8");
+          fiveHourResetsAt = now + 5 * 3600 * 1000;
+        }
+      }
+    } else {
+      // Usage dropped below 100%, clear hit tracker
+      try { if (existsSync(hitFile)) unlinkSync(hitFile); } catch {}
+    }
+
+    const result: { fiveHour: number; sevenDay: number; fiveHourResetsAt?: number } = { fiveHour, sevenDay };
+    if (fiveHourResetsAt) result.fiveHourResetsAt = fiveHourResetsAt;
     writeFileSync(cacheFile, JSON.stringify(result), "utf-8");
     return result;
   } catch {
@@ -167,9 +209,14 @@ export function render(input: string): string {
   // 5h:100% · 7d:26% · 30d:$960
   const usageParts: string[] = [];
   if (claudeUsage) {
-    const c5 = ctxColor(claudeUsage.fiveHour);
+    if (claudeUsage.fiveHour >= 100 && claudeUsage.fiveHourResetsAt) {
+      const countdown = formatCountdown(claudeUsage.fiveHourResetsAt);
+      usageParts.push(`${FG_RED}5h:${countdown}${r}`);
+    } else {
+      const c5 = ctxColor(claudeUsage.fiveHour);
+      usageParts.push(`${c5}5h:${claudeUsage.fiveHour}%${r}`);
+    }
     const c7 = ctxColor(claudeUsage.sevenDay);
-    usageParts.push(`${c5}5h:${claudeUsage.fiveHour}%${r}`);
     usageParts.push(`${c7}7d:${claudeUsage.sevenDay}%${r}`);
   }
   if (cache) {

@@ -23,7 +23,7 @@ npm i -g cc-costline && cc-costline install
 | 模块 | 示例 | 说明 |
 |------|------|------|
 | Token ~ 费用 / 上下文 | `14.6k ~ $2.42 / 40% by Opus 4.6` | 会话 token 数量、费用、上下文使用率和模型 |
-| 使用限额 | `5h: 45% / 7d: 8%` | Claude 5 小时和 7 天使用率（颜色同上下文） |
+| 使用限额 | `5h: 45% / 7d: 8%` | Claude 5 小时和 7 天使用率（颜色同上下文）。达到 100% 时显示倒计时：`5h:-3:20` |
 | 周期费用 | `30d: $866` | 滚动费用合计（可配置：7d 或 30d） |
 | 排行榜 | `#2/22 $67.0` | [ccclub](https://github.com/mazzzystar/ccclub) 排名（需安装） |
 
@@ -76,6 +76,12 @@ cc-costline config --period 7d   # 显示 7 天费用
 未知模型按系列名称回退，默认使用 Sonnet 定价。
 
 </details>
+
+## 开发
+
+```bash
+npm test    # 构建 + 运行单元测试（node:test，零依赖）
+```
 
 ## 卸载
 

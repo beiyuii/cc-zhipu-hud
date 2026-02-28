@@ -23,7 +23,7 @@ Abre una nueva sesión de Claude Code y verás la statusline mejorada. Requiere 
 | Segmento | Ejemplo | Descripción |
 |----------|---------|-------------|
 | Tokens ~ Costo / Contexto | `14.6k ~ $2.42 / 40% by Opus 4.6` | Tokens de la sesión, costo, uso de contexto y modelo |
-| Límites de uso | `5h: 45% / 7d: 8%` | Utilización de Claude a 5 horas y 7 días (coloreado como el contexto) |
+| Límites de uso | `5h: 45% / 7d: 8%` | Utilización de Claude a 5 horas y 7 días (coloreado como el contexto). Al 100%, muestra cuenta regresiva: `5h:-3:20` |
 | Costo del período | `30d: $866` | Costo acumulado (configurable: 7d o 30d) |
 | Ranking | `#2/22 $67.0` | Posición en [ccclub](https://github.com/mazzzystar/ccclub) (si está instalado) |
 
@@ -76,6 +76,12 @@ Precios por millón de tokens (USD):
 Los modelos desconocidos usan el precio de su familia, Sonnet por defecto.
 
 </details>
+
+## Desarrollo
+
+```bash
+npm test    # Build + ejecutar tests unitarios (node:test, sin dependencias)
+```
 
 ## Desinstalación
 

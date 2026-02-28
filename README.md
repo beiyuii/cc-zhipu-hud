@@ -23,7 +23,7 @@ Open a new Claude Code session and you'll see the enhanced statusline. Requires 
 | Segment | Example | Description |
 |---------|---------|-------------|
 | Tokens ~ Cost / Context | `14.6k ~ $2.42 / 40% by Opus 4.6` | Session token count, cost, context usage, and model |
-| Usage limits | `5h: 45% / 7d: 8%` | Claude 5-hour and 7-day utilization (auto-colored like context) |
+| Usage limits | `5h: 45% / 7d: 8%` | Claude 5-hour and 7-day utilization (auto-colored like context). At 100%, shows countdown: `5h:-3:20` |
 | Period cost | `30d: $866` | Rolling cost total (configurable: 7d or 30d) |
 | Leaderboard | `#2/22 $67.0` | [ccclub](https://github.com/mazzzystar/ccclub) rank (if installed) |
 
@@ -76,6 +76,12 @@ Prices per million tokens (USD):
 Unknown models fall back by family name, defaulting to Sonnet pricing.
 
 </details>
+
+## Development
+
+```bash
+npm test    # Build + run unit tests (node:test, zero dependencies)
+```
 
 ## Uninstall
 
