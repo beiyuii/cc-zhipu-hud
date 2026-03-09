@@ -30,7 +30,7 @@ Abre una nueva sesión de Claude Code y verás la statusline mejorada. Requiere 
 ### Colores
 
 - **Contexto y límites de uso** — verde (< 60%) → naranja (60-79%) → rojo (≥ 80%)
-- **Posición en ranking** — 1.o: dorado, 2.o: blanco, 3.o: naranja, resto: azul
+- **Posición en ranking** — 1.o: dorado, 2.o: blanco, 3.o: naranja, resto: cian
 - **Costo del período** — amarillo
 
 ### Integraciones opcionales
@@ -46,8 +46,9 @@ Ambas funcionan sin configuración: si no están disponibles, el segmento se ocu
 cc-costline install              # Configurar la integración con Claude Code
 cc-costline uninstall            # Eliminar de la configuración
 cc-costline refresh              # Recalcular manualmente la caché de costos
-cc-costline config --period 30d  # Mostrar costo de 30 días (por defecto)
-cc-costline config --period 7d   # Mostrar costo de 7 días
+cc-costline config --period 7d   # Mostrar costo de 7 días (por defecto)
+cc-costline config --period 30d  # Mostrar costo de 30 días
+cc-costline config --period both # Mostrar ambos períodos
 ```
 
 ## Cómo funciona
@@ -55,8 +56,8 @@ cc-costline config --period 7d   # Mostrar costo de 7 días
 1. `install` configura `~/.claude/settings.json` — establece el comando de statusline y añade hooks de fin de sesión para la actualización automática. Tu configuración existente se conserva.
 2. `render` lee el JSON de stdin de Claude Code y la caché de costos, y genera la statusline formateada.
 3. `refresh` escanea `~/.claude/projects/**/*.jsonl`, extrae el uso de tokens, aplica precios por modelo y escribe en `~/.cc-costline/cache.json`.
-4. El uso de Claude se obtiene de `api.anthropic.com/api/oauth/usage` con una caché de 60 s en `/tmp/sl-claude-usage`.
-5. El ranking de ccclub se obtiene de `ccclub.dev/api/rank` con una caché de 120 s en `/tmp/sl-ccclub-rank`.
+4. El uso de Claude se obtiene de `api.anthropic.com/api/oauth/usage`, cacheado por sesión con un TTL de 10 minutos en `/tmp/sl-claude-usage`.
+5. El ranking de ccclub se obtiene de `ccclub.dev/api/rank`, cacheado por sesión con un TTL de 10 minutos en `/tmp/sl-ccclub-rank`.
 
 <details>
 <summary>Tabla de precios</summary>

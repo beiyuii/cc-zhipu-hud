@@ -30,7 +30,7 @@ Ouvrez une nouvelle session Claude Code et la statusline enrichie apparaîtra. N
 ### Couleurs
 
 - **Contexte et limites** — vert (< 60 %) → orange (60-79 %) → rouge (≥ 80 %)
-- **Rang au classement** — 1er : or, 2e : blanc, 3e : orange, autres : bleu
+- **Rang au classement** — 1er : or, 2e : blanc, 3e : orange, autres : cyan
 - **Coût périodique** — jaune
 
 ### Intégrations optionnelles
@@ -46,8 +46,9 @@ Les deux fonctionnent sans configuration : si indisponibles, le segment est masq
 cc-costline install              # Configurer l'intégration Claude Code
 cc-costline uninstall            # Supprimer des paramètres
 cc-costline refresh              # Recalculer manuellement le cache des coûts
-cc-costline config --period 30d  # Afficher le coût sur 30 jours (par défaut)
-cc-costline config --period 7d   # Afficher le coût sur 7 jours
+cc-costline config --period 7d   # Afficher le coût sur 7 jours (par défaut)
+cc-costline config --period 30d  # Afficher le coût sur 30 jours
+cc-costline config --period both # Afficher les deux périodes
 ```
 
 ## Fonctionnement
@@ -55,8 +56,8 @@ cc-costline config --period 7d   # Afficher le coût sur 7 jours
 1. `install` configure `~/.claude/settings.json` — définit la commande statusline et ajoute des hooks de fin de session pour le rafraîchissement automatique. Vos paramètres existants sont préservés.
 2. `render` lit le JSON stdin de Claude Code et le cache des coûts, puis produit la statusline formatée.
 3. `refresh` parcourt `~/.claude/projects/**/*.jsonl`, extrait l'utilisation des tokens, applique la tarification par modèle et écrit dans `~/.cc-costline/cache.json`.
-4. L'utilisation Claude est récupérée depuis `api.anthropic.com/api/oauth/usage` avec un cache fichier de 60 s dans `/tmp/sl-claude-usage`.
-5. Le rang ccclub est récupéré depuis `ccclub.dev/api/rank` avec un cache fichier de 120 s dans `/tmp/sl-ccclub-rank`.
+4. L'utilisation Claude est récupérée depuis `api.anthropic.com/api/oauth/usage`, mise en cache par session avec un TTL de 10 minutes dans `/tmp/sl-claude-usage`.
+5. Le rang ccclub est récupéré depuis `ccclub.dev/api/rank`, mis en cache par session avec un TTL de 10 minutes dans `/tmp/sl-ccclub-rank`.
 
 <details>
 <summary>Grille tarifaire</summary>

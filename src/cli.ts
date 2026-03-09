@@ -1,8 +1,12 @@
 #!/usr/bin/env node
 
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { homedir } from "node:os";
+import { fileURLToPath } from "node:url";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const pkg = JSON.parse(readFileSync(join(__dirname, "..", "package.json"), "utf-8"));
 import { collectCosts } from "./collector.js";
 import { writeCache, writeConfig, readConfig, CACHE_DIR } from "./cache.js";
 import { render } from "./statusline.js";
@@ -174,7 +178,7 @@ switch (command) {
     cmdRender();
     break;
   default:
-    console.log(`cc-costline v0.1.0 — Enhanced statusline for Claude Code
+    console.log(`cc-costline v${pkg.version} — Enhanced statusline for Claude Code
 
 Commands:
   install     Configure Claude Code to use cc-costline

@@ -30,7 +30,7 @@ npm i -g cc-costline && cc-costline install
 ### カラールール
 
 - **コンテキスト・使用制限** — 緑（< 60%）→ オレンジ（60-79%）→ 赤（≥ 80%）
-- **リーダーボードランク** — 1 位：ゴールド、2 位：ホワイト、3 位：オレンジ、その他：ブルー
+- **リーダーボードランク** — 1 位：ゴールド、2 位：ホワイト、3 位：オレンジ、その他：シアン
 - **期間コスト** — イエロー
 
 ### オプション連携
@@ -46,8 +46,9 @@ npm i -g cc-costline && cc-costline install
 cc-costline install              # Claude Code 連携のセットアップ
 cc-costline uninstall            # 設定から削除
 cc-costline refresh              # コストキャッシュを手動再計算
-cc-costline config --period 30d  # 30 日間のコストを表示（デフォルト）
-cc-costline config --period 7d   # 7 日間のコストを表示
+cc-costline config --period 7d   # 7 日間のコストを表示（デフォルト）
+cc-costline config --period 30d  # 30 日間のコストを表示
+cc-costline config --period both # 両方の期間を表示
 ```
 
 ## 仕組み
@@ -55,8 +56,8 @@ cc-costline config --period 7d   # 7 日間のコストを表示
 1. `install` は `~/.claude/settings.json` を設定 — ステータスラインコマンドとセッション終了フックを追加します。既存の設定は保持されます。
 2. `render` は Claude Code の stdin JSON とコストキャッシュを読み取り、フォーマットされたステータスラインを出力します。
 3. `refresh` は `~/.claude/projects/**/*.jsonl` をスキャンし、トークン使用量を抽出、モデル別価格を適用して `~/.cc-costline/cache.json` に書き込みます。
-4. Claude 使用率は `api.anthropic.com/api/oauth/usage` から取得され、60 秒のファイルキャッシュが `/tmp/sl-claude-usage` に保存されます。
-5. ccclub ランキングは `ccclub.dev/api/rank` から取得され、120 秒のファイルキャッシュが `/tmp/sl-ccclub-rank` に保存されます。
+4. Claude 使用率は `api.anthropic.com/api/oauth/usage` から取得され、セッションごとにキャッシュされます（10 分 TTL フォールバック、`/tmp/sl-claude-usage`）。
+5. ccclub ランキングは `ccclub.dev/api/rank` から取得され、セッションごとにキャッシュされます（10 分 TTL フォールバック、`/tmp/sl-ccclub-rank`）。
 
 <details>
 <summary>料金表</summary>

@@ -30,7 +30,7 @@ Open a new Claude Code session and you'll see the enhanced statusline. Requires 
 ### Colors
 
 - **Context & usage limits** — green (< 60%) → orange (60-79%) → red (≥ 80%)
-- **Leaderboard rank** — #1 gold, #2 white, #3 orange, others blue
+- **Leaderboard rank** — #1 gold, #2 white, #3 orange, others cyan
 - **Period cost** — yellow
 
 ### Optional integrations
@@ -46,8 +46,9 @@ Both are zero-config: if not available, the segment is silently omitted.
 cc-costline install              # Set up Claude Code integration
 cc-costline uninstall            # Remove from settings
 cc-costline refresh              # Manually recalculate cost cache
-cc-costline config --period 30d  # Show 30-day cost (default)
-cc-costline config --period 7d   # Show 7-day cost
+cc-costline config --period 7d   # Show 7-day cost (default)
+cc-costline config --period 30d  # Show 30-day cost
+cc-costline config --period both # Show both periods
 ```
 
 ## How it works
@@ -55,8 +56,8 @@ cc-costline config --period 7d   # Show 7-day cost
 1. `install` configures `~/.claude/settings.json` — sets the statusline command and adds session-end hooks for auto-refresh. Your existing settings are preserved.
 2. `render` reads Claude Code's stdin JSON and the cost cache, outputs the formatted statusline.
 3. `refresh` scans `~/.claude/projects/**/*.jsonl`, extracts token usage, applies per-model pricing, and writes to `~/.cc-costline/cache.json`.
-4. Claude usage is fetched from `api.anthropic.com/api/oauth/usage` with a 60s file cache at `/tmp/sl-claude-usage`.
-5. ccclub rank is fetched from `ccclub.dev/api/rank` with a 120s file cache at `/tmp/sl-ccclub-rank`.
+4. Claude usage is fetched from `api.anthropic.com/api/oauth/usage`, cached per session with a 10-minute TTL fallback at `/tmp/sl-claude-usage`.
+5. ccclub rank is fetched from `ccclub.dev/api/rank`, cached per session with a 10-minute TTL fallback at `/tmp/sl-ccclub-rank`.
 
 <details>
 <summary>Pricing table</summary>

@@ -30,7 +30,7 @@ npm i -g cc-costline && cc-costline install
 ### 颜色规则
 
 - **上下文和使用限额** — 绿色（< 60%）→ 橙色（60-79%）→ 红色（≥ 80%）
-- **排行榜排名** — 第 1 名金色，第 2 名白色，第 3 名橙色，其余蓝色
+- **排行榜排名** — 第 1 名金色，第 2 名白色，第 3 名橙色，其余青色
 - **周期费用** — 黄色
 
 ### 可选集成
@@ -46,8 +46,9 @@ npm i -g cc-costline && cc-costline install
 cc-costline install              # 设置 Claude Code 集成
 cc-costline uninstall            # 从设置中移除
 cc-costline refresh              # 手动重新计算费用缓存
-cc-costline config --period 30d  # 显示 30 天费用（默认）
-cc-costline config --period 7d   # 显示 7 天费用
+cc-costline config --period 7d   # 显示 7 天费用（默认）
+cc-costline config --period 30d  # 显示 30 天费用
+cc-costline config --period both # 同时显示两个周期
 ```
 
 ## 工作原理
@@ -55,8 +56,8 @@ cc-costline config --period 7d   # 显示 7 天费用
 1. `install` 配置 `~/.claude/settings.json` — 设置状态栏命令并添加会话结束 hook 以自动刷新。你的现有设置会被保留。
 2. `render` 读取 Claude Code 的 stdin JSON 和费用缓存，输出格式化的状态栏。
 3. `refresh` 扫描 `~/.claude/projects/**/*.jsonl`，提取 token 用量，按模型定价计算，写入 `~/.cc-costline/cache.json`。
-4. Claude 使用率从 `api.anthropic.com/api/oauth/usage` 获取，60 秒文件缓存于 `/tmp/sl-claude-usage`。
-5. ccclub 排名从 `ccclub.dev/api/rank` 获取，120 秒文件缓存于 `/tmp/sl-ccclub-rank`。
+4. Claude 使用率从 `api.anthropic.com/api/oauth/usage` 获取，按会话缓存，10 分钟 TTL 兜底，存于 `/tmp/sl-claude-usage`。
+5. ccclub 排名从 `ccclub.dev/api/rank` 获取，按会话缓存，10 分钟 TTL 兜底，存于 `/tmp/sl-ccclub-rank`。
 
 <details>
 <summary>定价表</summary>
