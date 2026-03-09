@@ -55,6 +55,9 @@ function getCcclubRank(sessionId: string): { rank: number; total: number; cost: 
       const cached = JSON.parse(readFileSync(cacheFile, "utf-8"));
       staleData = cached.data ?? null;
       if (cached.sessionId === sessionId) return staleData;
+      // If cache is less than 2 minutes old, reuse it to avoid rate limits
+      const cacheAge = Date.now() - (cached.timestamp || 0);
+      if (cacheAge < 600_000) return staleData;
     } catch { }
   }
   try {
@@ -71,9 +74,10 @@ function getCcclubRank(sessionId: string): { rank: number; total: number; cost: 
     const me = rankings.find((r: any) => r.userId === userId);
     if (!me) return staleData;
     const result = { rank: me.rank, total: rankings.length, cost: me.costUSD };
-    writeFileSync(cacheFile, JSON.stringify({ sessionId, data: result }), "utf-8");
+    writeFileSync(cacheFile, JSON.stringify({ sessionId, data: result, timestamp: Date.now() }), "utf-8");
     return result;
   } catch {
+    try { writeFileSync(cacheFile, JSON.stringify({ sessionId, data: staleData, timestamp: Date.now() }), "utf-8"); } catch {}
     return staleData;
   }
 }
@@ -96,6 +100,9 @@ function getClaudeUsage(sessionId: string): { fiveHour: number; sevenDay: number
       const cached = JSON.parse(readFileSync(cacheFile, "utf-8"));
       staleData = cached.data ?? null;
       if (cached.sessionId === sessionId) return staleData;
+      // If cache is less than 2 minutes old, reuse it to avoid rate limits
+      const cacheAge = now - (cached.timestamp || 0);
+      if (cacheAge < 600_000) return staleData;
     } catch { }
   }
   try {
@@ -109,9 +116,13 @@ function getClaudeUsage(sessionId: string): { fiveHour: number; sevenDay: number
     const expiresAt = credentials.claudeAiOauth?.expiresAt;
     if (expiresAt && Date.now() / 1000 > expiresAt) return null;
     const apiUrl = "https://api.anthropic.com/api/oauth/usage";
-    const curlCmd = `curl -sf "${apiUrl}" -H "Authorization: Bearer ${accessToken}" -H "anthropic-beta: oauth-2025-04-20" -H "User-Agent: claude-code/2.1.5"`;
+    const curlCmd = `curl -sf "${apiUrl}" -H "Authorization: Bearer ${accessToken}" -H "anthropic-beta: oauth-2025-04-20"`;
     const response = execSync(curlCmd, { encoding: "utf-8", timeout: 5000 });
-    if (!response) return null;
+    if (!response) {
+      // API failed — write cache with null data to prevent retry flood
+      writeFileSync(cacheFile, JSON.stringify({ sessionId, data: null, timestamp: now }), "utf-8");
+      return staleData;
+    }
     const data = JSON.parse(response);
     const parseUtil = (val: any): number => {
       if (typeof val === "number") return Math.round(val);
@@ -150,9 +161,11 @@ function getClaudeUsage(sessionId: string): { fiveHour: number; sevenDay: number
 
     const result: { fiveHour: number; sevenDay: number; fiveHourResetsAt?: number } = { fiveHour, sevenDay };
     if (fiveHourResetsAt) result.fiveHourResetsAt = fiveHourResetsAt;
-    writeFileSync(cacheFile, JSON.stringify({ sessionId, data: result }), "utf-8");
+    writeFileSync(cacheFile, JSON.stringify({ sessionId, data: result, timestamp: now }), "utf-8");
     return result;
   } catch {
+    // Write cache with stale/null data to prevent retry flood on persistent failures
+    try { writeFileSync(cacheFile, JSON.stringify({ sessionId, data: staleData, timestamp: now }), "utf-8"); } catch {}
     return staleData;
   }
 }
