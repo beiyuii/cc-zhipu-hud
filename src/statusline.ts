@@ -44,38 +44,37 @@ export function formatCountdown(resetsAtMs: number): string {
   return `-${hours}:${String(minutes).padStart(2, "0")}`;
 }
 
-// ccclub rank fetcher with 120s file cache
-function getCcclubRank(): { rank: number; total: number; cost: number } | null {
+// ccclub rank fetcher — cached per session (stale fallback on failure)
+function getCcclubRank(sessionId: string): { rank: number; total: number; cost: number } | null {
   const configPath = join(homedir(), ".ccclub", "config.json");
   if (!existsSync(configPath)) return null;
   const cacheFile = "/tmp/sl-ccclub-rank";
-  const now = Date.now() / 1000;
+  let staleData: { rank: number; total: number; cost: number } | null = null;
   if (existsSync(cacheFile)) {
-    const mtime = statSync(cacheFile).mtimeMs / 1000;
-    if (now - mtime <= 120) {
-      try {
-        return JSON.parse(readFileSync(cacheFile, "utf-8"));
-      } catch { }
-    }
+    try {
+      const cached = JSON.parse(readFileSync(cacheFile, "utf-8"));
+      staleData = cached.data ?? null;
+      if (cached.sessionId === sessionId) return staleData;
+    } catch { }
   }
   try {
     const config = JSON.parse(readFileSync(configPath, "utf-8"));
     const code = config.groups?.[0];
     const userId = config.userId;
-    if (!code || !userId) return null;
+    if (!code || !userId) return staleData;
     const tz = -(new Date()).getTimezoneOffset();
     const url = `${config.apiUrl}/api/rank/${code}?period=today&tz=${tz}`;
     const response = execSync(`curl -sf "${url}"`, { encoding: "utf-8", timeout: 5000 });
-    if (!response) return null;
+    if (!response) return staleData;
     const data = JSON.parse(response);
     const rankings = data.rankings || [];
     const me = rankings.find((r: any) => r.userId === userId);
-    if (!me) return null;
+    if (!me) return staleData;
     const result = { rank: me.rank, total: rankings.length, cost: me.costUSD };
-    writeFileSync(cacheFile, JSON.stringify(result), "utf-8");
+    writeFileSync(cacheFile, JSON.stringify({ sessionId, data: result }), "utf-8");
     return result;
   } catch {
-    return null;
+    return staleData;
   }
 }
 
@@ -86,19 +85,18 @@ export function rankColor(rank: number): string {
   return FG_CYAN;
 }
 
-// Claude usage fetcher with 60s file cache
-function getClaudeUsage(): { fiveHour: number; sevenDay: number; fiveHourResetsAt?: number } | null {
+// Claude usage fetcher — cached per session (stale fallback on failure)
+function getClaudeUsage(sessionId: string): { fiveHour: number; sevenDay: number; fiveHourResetsAt?: number } | null {
   const cacheFile = "/tmp/sl-claude-usage";
   const hitFile = "/tmp/sl-claude-usage-hit";
   const now = Date.now();
-  const nowSec = now / 1000;
+  let staleData: { fiveHour: number; sevenDay: number; fiveHourResetsAt?: number } | null = null;
   if (existsSync(cacheFile)) {
-    const mtime = statSync(cacheFile).mtimeMs / 1000;
-    if (nowSec - mtime <= 60) {
-      try {
-        return JSON.parse(readFileSync(cacheFile, "utf-8"));
-      } catch { }
-    }
+    try {
+      const cached = JSON.parse(readFileSync(cacheFile, "utf-8"));
+      staleData = cached.data ?? null;
+      if (cached.sessionId === sessionId) return staleData;
+    } catch { }
   }
   try {
     const username = process.env.USER || process.env.USERNAME;
@@ -152,10 +150,10 @@ function getClaudeUsage(): { fiveHour: number; sevenDay: number; fiveHourResetsA
 
     const result: { fiveHour: number; sevenDay: number; fiveHourResetsAt?: number } = { fiveHour, sevenDay };
     if (fiveHourResetsAt) result.fiveHourResetsAt = fiveHourResetsAt;
-    writeFileSync(cacheFile, JSON.stringify(result), "utf-8");
+    writeFileSync(cacheFile, JSON.stringify({ sessionId, data: result }), "utf-8");
     return result;
   } catch {
-    return null;
+    return staleData;
   }
 }
 
@@ -172,9 +170,12 @@ export function render(input: string): string {
   const model = data.model?.display_name ?? "—";
   const contextPct = Math.floor(data.context_window?.used_percentage ?? 0);
 
+  // Session ID from transcript path (filename without extension)
+  const transcriptPath = data.transcript_path ?? "";
+  const sessionId = transcriptPath ? transcriptPath.replace(/^.*\//, "").replace(/\.jsonl$/, "") : "";
+
   // Token stats from transcript
   let totalTokens = 0;
-  const transcriptPath = data.transcript_path ?? "";
   if (transcriptPath) {
     try {
       const content = readFileSync(transcriptPath, "utf-8");
@@ -193,7 +194,7 @@ export function render(input: string): string {
 
   const cache = readCache();
   const config = readConfig();
-  const claudeUsage = getClaudeUsage();
+  const claudeUsage = getClaudeUsage(sessionId);
   const g = FG_GRAY_DIM;
   const y = FG_YELLOW;
   const m = FG_MODEL;
@@ -229,7 +230,7 @@ export function render(input: string): string {
   }
 
   // #2 $53.6
-  const ccclubRank = getCcclubRank();
+  const ccclubRank = getCcclubRank(sessionId);
   if (ccclubRank) {
     const rc = rankColor(ccclubRank.rank);
     segments.push(`${rc}#${ccclubRank.rank} ${formatCost(ccclubRank.cost)}${r}`);
