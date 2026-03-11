@@ -36,8 +36,8 @@ function findJsonlFiles(dir: string): string[] {
   return results;
 }
 
-export function collectCosts(): CollectResult {
-  const projectsDir = join(homedir(), CLAUDE_PROJECTS_DIR);
+export function collectCosts(baseDir?: string): CollectResult {
+  const projectsDir = baseDir || join(homedir(), CLAUDE_PROJECTS_DIR);
   const files = findJsonlFiles(projectsDir);
 
   if (files.length === 0) {
@@ -83,7 +83,7 @@ export function collectCosts(): CollectResult {
       const sessionId = parsed.sessionId || "";
       const dedupeKey = requestId
         ? `${sessionId}:${requestId}`
-        : `${sessionId}:${parsed.timestamp}:${usage.input_tokens}:${usage.output_tokens}`;
+        : `${sessionId}:${parsed.timestamp}:${parsed.message.model}:${usage.input_tokens}:${usage.output_tokens}:${usage.cache_creation_input_tokens || 0}:${usage.cache_read_input_tokens || 0}`;
 
       if (seen.has(dedupeKey)) continue;
       seen.add(dedupeKey);

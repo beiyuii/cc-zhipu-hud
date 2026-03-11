@@ -2,7 +2,11 @@ import { readFileSync, existsSync, statSync, writeFileSync, unlinkSync } from "n
 import { join } from "node:path";
 import { homedir } from "node:os";
 import { execSync } from "node:child_process";
-import { readCache, readConfig } from "./cache.js";
+import { readCache, writeCache, readConfig } from "./cache.js";
+import { collectCosts } from "./collector.js";
+
+// Unified TTL for all cached data (2 minutes)
+const CACHE_TTL_MS = 120_000;
 
 // ANSI colors (matching original statusline.sh)
 const FG_GRAY      = "\x1b[38;5;245m";
@@ -44,8 +48,8 @@ export function formatCountdown(resetsAtMs: number): string {
   return `-${hours}:${String(minutes).padStart(2, "0")}`;
 }
 
-// ccclub rank fetcher — cached per session (stale fallback on failure)
-function getCcclubRank(sessionId: string): { rank: number; total: number; cost: number } | null {
+// ccclub rank fetcher — TTL-based cache (stale fallback on failure)
+function getCcclubRank(): { rank: number; total: number; cost: number } | null {
   const configPath = join(homedir(), ".ccclub", "config.json");
   if (!existsSync(configPath)) return null;
   const cacheFile = "/tmp/sl-ccclub-rank";
@@ -54,10 +58,8 @@ function getCcclubRank(sessionId: string): { rank: number; total: number; cost: 
     try {
       const cached = JSON.parse(readFileSync(cacheFile, "utf-8"));
       staleData = cached.data ?? null;
-      if (cached.sessionId === sessionId) return staleData;
-      // If cache is less than 2 minutes old, reuse it to avoid rate limits
       const cacheAge = Date.now() - (cached.timestamp || 0);
-      if (cacheAge < 600_000) return staleData;
+      if (cacheAge < CACHE_TTL_MS) return staleData;
     } catch { }
   }
   try {
@@ -74,10 +76,10 @@ function getCcclubRank(sessionId: string): { rank: number; total: number; cost: 
     const me = rankings.find((r: any) => r.userId === userId);
     if (!me) return staleData;
     const result = { rank: me.rank, total: rankings.length, cost: me.costUSD };
-    writeFileSync(cacheFile, JSON.stringify({ sessionId, data: result, timestamp: Date.now() }), "utf-8");
+    writeFileSync(cacheFile, JSON.stringify({ data: result, timestamp: Date.now() }), "utf-8");
     return result;
   } catch {
-    try { writeFileSync(cacheFile, JSON.stringify({ sessionId, data: staleData, timestamp: Date.now() }), "utf-8"); } catch {}
+    try { writeFileSync(cacheFile, JSON.stringify({ data: staleData, timestamp: Date.now() }), "utf-8"); } catch {}
     return staleData;
   }
 }
@@ -89,8 +91,8 @@ export function rankColor(rank: number): string {
   return FG_CYAN;
 }
 
-// Claude usage fetcher — cached per session (stale fallback on failure)
-function getClaudeUsage(sessionId: string): { fiveHour: number; sevenDay: number; fiveHourResetsAt?: number } | null {
+// Claude usage fetcher — TTL-based cache (stale fallback on failure)
+function getClaudeUsage(): { fiveHour: number; sevenDay: number; fiveHourResetsAt?: number } | null {
   const cacheFile = "/tmp/sl-claude-usage";
   const hitFile = "/tmp/sl-claude-usage-hit";
   const now = Date.now();
@@ -99,10 +101,8 @@ function getClaudeUsage(sessionId: string): { fiveHour: number; sevenDay: number
     try {
       const cached = JSON.parse(readFileSync(cacheFile, "utf-8"));
       staleData = cached.data ?? null;
-      if (cached.sessionId === sessionId) return staleData;
-      // If cache is less than 2 minutes old, reuse it to avoid rate limits
       const cacheAge = now - (cached.timestamp || 0);
-      if (cacheAge < 600_000) return staleData;
+      if (cacheAge < CACHE_TTL_MS) return staleData;
     } catch { }
   }
   try {
@@ -120,7 +120,7 @@ function getClaudeUsage(sessionId: string): { fiveHour: number; sevenDay: number
     const response = execSync(curlCmd, { encoding: "utf-8", timeout: 5000 });
     if (!response) {
       // API failed — write cache with null data to prevent retry flood
-      writeFileSync(cacheFile, JSON.stringify({ sessionId, data: null, timestamp: now }), "utf-8");
+      writeFileSync(cacheFile, JSON.stringify({ data: null, timestamp: now }), "utf-8");
       return staleData;
     }
     const data = JSON.parse(response);
@@ -161,11 +161,11 @@ function getClaudeUsage(sessionId: string): { fiveHour: number; sevenDay: number
 
     const result: { fiveHour: number; sevenDay: number; fiveHourResetsAt?: number } = { fiveHour, sevenDay };
     if (fiveHourResetsAt) result.fiveHourResetsAt = fiveHourResetsAt;
-    writeFileSync(cacheFile, JSON.stringify({ sessionId, data: result, timestamp: now }), "utf-8");
+    writeFileSync(cacheFile, JSON.stringify({ data: result, timestamp: now }), "utf-8");
     return result;
   } catch {
     // Write cache with stale/null data to prevent retry flood on persistent failures
-    try { writeFileSync(cacheFile, JSON.stringify({ sessionId, data: staleData, timestamp: now }), "utf-8"); } catch {}
+    try { writeFileSync(cacheFile, JSON.stringify({ data: staleData, timestamp: now }), "utf-8"); } catch {}
     return staleData;
   }
 }
@@ -183,9 +183,7 @@ export function render(input: string): string {
   const model = data.model?.display_name ?? "—";
   const contextPct = Math.floor(data.context_window?.used_percentage ?? 0);
 
-  // Session ID from transcript path (filename without extension)
   const transcriptPath = data.transcript_path ?? "";
-  const sessionId = transcriptPath ? transcriptPath.replace(/^.*\//, "").replace(/\.jsonl$/, "") : "";
 
   // Token stats from transcript
   let totalTokens = 0;
@@ -205,9 +203,23 @@ export function render(input: string): string {
     } catch { }
   }
 
-  const cache = readCache();
+  // Refresh local cost cache if stale
+  let cache = readCache();
+  const cacheAge = cache ? Date.now() - new Date(cache.updatedAt).getTime() : Infinity;
+  if (cacheAge >= CACHE_TTL_MS) {
+    try {
+      const result = collectCosts();
+      // Don't overwrite valid cache with zeros (directory read failure)
+      if (result.cost7d > 0 || result.cost30d > 0 || !cache) {
+        const newCache = { cost7d: result.cost7d, cost30d: result.cost30d, updatedAt: new Date().toISOString() };
+        writeCache(newCache);
+        cache = newCache;
+      }
+    } catch {}
+  }
+
   const config = readConfig();
-  const claudeUsage = getClaudeUsage(sessionId);
+  const claudeUsage = getClaudeUsage();
   const g = FG_GRAY_DIM;
   const y = FG_YELLOW;
   const m = FG_MODEL;
@@ -235,15 +247,20 @@ export function render(input: string): string {
   }
   if (cache) {
     const period = config.period || "30d";
-    const periodCost = period === "7d" ? cache.cost7d : cache.cost30d;
-    usageParts.push(`${y}${period}:${formatCost(periodCost)}${r}`);
+    if (period === "both") {
+      usageParts.push(`${y}7d:${formatCost(cache.cost7d)}${r}`);
+      usageParts.push(`${y}30d:${formatCost(cache.cost30d)}${r}`);
+    } else {
+      const periodCost = period === "7d" ? cache.cost7d : cache.cost30d;
+      usageParts.push(`${y}${period}:${formatCost(periodCost)}${r}`);
+    }
   }
   if (usageParts.length > 0) {
     segments.push(usageParts.join(` ${g}·${r} `));
   }
 
   // #2 $53.6
-  const ccclubRank = getCcclubRank(sessionId);
+  const ccclubRank = getCcclubRank();
   if (ccclubRank) {
     const rc = rankColor(ccclubRank.rank);
     segments.push(`${rc}#${ccclubRank.rank} ${formatCost(ccclubRank.cost)}${r}`);

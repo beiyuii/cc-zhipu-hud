@@ -18,10 +18,14 @@ const REFRESH_COMMAND = "cc-costline refresh";
 // ─── Helpers ──────────────────────────────────────────────
 
 function readSettings(): any {
+  if (!existsSync(SETTINGS_PATH)) return {};
+  const raw = readFileSync(SETTINGS_PATH, "utf-8");
   try {
-    return JSON.parse(readFileSync(SETTINGS_PATH, "utf-8"));
+    return JSON.parse(raw);
   } catch {
-    return {};
+    console.error(`✗ Failed to parse ${SETTINGS_PATH} — aborting to avoid overwriting your config.`);
+    console.error("  Please fix the JSON syntax and retry.");
+    process.exit(1);
   }
 }
 

@@ -24,7 +24,7 @@ Abre una nueva sesión de Claude Code y verás la statusline mejorada. Requiere 
 |----------|---------|-------------|
 | Tokens ~ Costo / Contexto | `14.6k ~ $2.42 / 40% by Opus 4.6` | Tokens de la sesión, costo, uso de contexto y modelo |
 | Límites de uso | `5h: 45% / 7d: 8%` | Utilización de Claude a 5 horas y 7 días (coloreado como el contexto). Al 100%, muestra cuenta regresiva: `5h:-3:20` |
-| Costo del período | `30d: $866` | Costo acumulado (configurable: 7d o 30d) |
+| Costo del período | `30d: $866` | Costo acumulado (configurable: 7d, 30d o both) |
 | Ranking | `#2/22 $67.0` | Posición en [ccclub](https://github.com/mazzzystar/ccclub) (si está instalado) |
 
 ### Colores
@@ -53,11 +53,12 @@ cc-costline config --period both # Mostrar ambos períodos
 
 ## Cómo funciona
 
-1. `install` configura `~/.claude/settings.json` — establece el comando de statusline y añade hooks de fin de sesión para la actualización automática. Tu configuración existente se conserva.
-2. `render` lee el JSON de stdin de Claude Code y la caché de costos, y genera la statusline formateada.
-3. `refresh` escanea `~/.claude/projects/**/*.jsonl`, extrae el uso de tokens, aplica precios por modelo y escribe en `~/.cc-costline/cache.json`.
-4. El uso de Claude se obtiene de `api.anthropic.com/api/oauth/usage`, cacheado por sesión con un TTL de 10 minutos en `/tmp/sl-claude-usage`.
-5. El ranking de ccclub se obtiene de `ccclub.dev/api/rank`, cacheado por sesión con un TTL de 10 minutos en `/tmp/sl-ccclub-rank`.
+1. `install` configura `~/.claude/settings.json` — establece el comando de statusline y añade hooks de fin de sesión. Tu configuración existente se conserva.
+2. `render` es llamado por Claude Code en cada turno de conversación. Lee el JSON de stdin para datos de sesión, luego actualiza todas las fuentes de datos en línea cuando su caché expira (TTL unificado de 2 minutos):
+   - **Costo local**: escanea `~/.claude/projects/**/*.jsonl`, aplica precios por modelo → `~/.cc-costline/cache.json`
+   - **Límites de uso**: obtiene de `api.anthropic.com/api/oauth/usage` → `/tmp/sl-claude-usage`
+   - **Ranking ccclub**: obtiene de `ccclub.dev/api/rank` → `/tmp/sl-ccclub-rank`
+3. `refresh` también puede ejecutarse manualmente o mediante hooks de fin de sesión para precalentar la caché.
 
 <details>
 <summary>Tabla de precios</summary>

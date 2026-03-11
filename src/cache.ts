@@ -1,10 +1,8 @@
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { join } from "node:path";
 import { homedir } from "node:os";
 
 const CACHE_DIR = join(homedir(), ".cc-costline");
-const CACHE_FILE = join(CACHE_DIR, "cache.json");
-const CONFIG_FILE = join(CACHE_DIR, "config.json");
 
 export interface CacheData {
   cost7d: number;
@@ -16,32 +14,34 @@ export interface ConfigData {
   period: "7d" | "30d" | "both";
 }
 
-export function readCache(): CacheData | null {
+export function readCache(dir?: string): CacheData | null {
   try {
-    const raw = readFileSync(CACHE_FILE, "utf-8");
+    const raw = readFileSync(join(dir || CACHE_DIR, "cache.json"), "utf-8");
     return JSON.parse(raw) as CacheData;
   } catch {
     return null;
   }
 }
 
-export function writeCache(data: CacheData): void {
-  mkdirSync(CACHE_DIR, { recursive: true });
-  writeFileSync(CACHE_FILE, JSON.stringify(data, null, 2) + "\n");
+export function writeCache(data: CacheData, dir?: string): void {
+  const d = dir || CACHE_DIR;
+  mkdirSync(d, { recursive: true });
+  writeFileSync(join(d, "cache.json"), JSON.stringify(data, null, 2) + "\n");
 }
 
-export function readConfig(): ConfigData {
+export function readConfig(dir?: string): ConfigData {
   try {
-    const raw = readFileSync(CONFIG_FILE, "utf-8");
+    const raw = readFileSync(join(dir || CACHE_DIR, "config.json"), "utf-8");
     return JSON.parse(raw) as ConfigData;
   } catch {
     return { period: "7d" };
   }
 }
 
-export function writeConfig(data: ConfigData): void {
-  mkdirSync(CACHE_DIR, { recursive: true });
-  writeFileSync(CONFIG_FILE, JSON.stringify(data, null, 2) + "\n");
+export function writeConfig(data: ConfigData, dir?: string): void {
+  const d = dir || CACHE_DIR;
+  mkdirSync(d, { recursive: true });
+  writeFileSync(join(d, "config.json"), JSON.stringify(data, null, 2) + "\n");
 }
 
 export { CACHE_DIR };

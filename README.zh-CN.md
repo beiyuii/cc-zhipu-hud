@@ -24,7 +24,7 @@ npm i -g cc-costline && cc-costline install
 |------|------|------|
 | Token ~ 费用 / 上下文 | `14.6k ~ $2.42 / 40% by Opus 4.6` | 会话 token 数量、费用、上下文使用率和模型 |
 | 使用限额 | `5h: 45% / 7d: 8%` | Claude 5 小时和 7 天使用率（颜色同上下文）。达到 100% 时显示倒计时：`5h:-3:20` |
-| 周期费用 | `30d: $866` | 滚动费用合计（可配置：7d 或 30d） |
+| 周期费用 | `30d: $866` | 滚动费用合计（可配置：7d、30d 或 both） |
 | 排行榜 | `#2/22 $67.0` | [ccclub](https://github.com/mazzzystar/ccclub) 排名（需安装） |
 
 ### 颜色规则
@@ -53,11 +53,12 @@ cc-costline config --period both # 同时显示两个周期
 
 ## 工作原理
 
-1. `install` 配置 `~/.claude/settings.json` — 设置状态栏命令并添加会话结束 hook 以自动刷新。你的现有设置会被保留。
-2. `render` 读取 Claude Code 的 stdin JSON 和费用缓存，输出格式化的状态栏。
-3. `refresh` 扫描 `~/.claude/projects/**/*.jsonl`，提取 token 用量，按模型定价计算，写入 `~/.cc-costline/cache.json`。
-4. Claude 使用率从 `api.anthropic.com/api/oauth/usage` 获取，按会话缓存，10 分钟 TTL 兜底，存于 `/tmp/sl-claude-usage`。
-5. ccclub 排名从 `ccclub.dev/api/rank` 获取，按会话缓存，10 分钟 TTL 兜底，存于 `/tmp/sl-ccclub-rank`。
+1. `install` 配置 `~/.claude/settings.json` — 设置状态栏命令并添加会话结束 hook。你的现有设置会被保留。
+2. `render` 在每次对话时被 Claude Code 调用，读取 stdin JSON 获取会话数据，然后按需刷新所有数据源（统一 2 分钟 TTL）：
+   - **本地费用**：扫描 `~/.claude/projects/**/*.jsonl`，按模型定价计算 → `~/.cc-costline/cache.json`
+   - **使用率**：从 `api.anthropic.com/api/oauth/usage` 获取 → `/tmp/sl-claude-usage`
+   - **ccclub 排名**：从 `ccclub.dev/api/rank` 获取 → `/tmp/sl-ccclub-rank`
+3. `refresh` 也可以手动运行或通过会话结束 hook 预热缓存。
 
 <details>
 <summary>定价表</summary>

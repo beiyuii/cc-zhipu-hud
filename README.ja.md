@@ -24,7 +24,7 @@ npm i -g cc-costline && cc-costline install
 |-----------|---|------|
 | トークン ~ コスト / コンテキスト | `14.6k ~ $2.42 / 40% by Opus 4.6` | セッションのトークン数、コスト、コンテキスト使用率、モデル |
 | 使用制限 | `5h: 45% / 7d: 8%` | Claude の 5 時間・7 日間の使用率（コンテキストと同じ色分け）。100% 到達時はカウントダウン表示：`5h:-3:20` |
-| 期間コスト | `30d: $866` | ローリングコスト合計（7d または 30d で設定可能） |
+| 期間コスト | `30d: $866` | ローリングコスト合計（7d、30d、または both で設定可能） |
 | リーダーボード | `#2/22 $67.0` | [ccclub](https://github.com/mazzzystar/ccclub) ランキング（インストール時） |
 
 ### カラールール
@@ -54,10 +54,11 @@ cc-costline config --period both # 両方の期間を表示
 ## 仕組み
 
 1. `install` は `~/.claude/settings.json` を設定 — ステータスラインコマンドとセッション終了フックを追加します。既存の設定は保持されます。
-2. `render` は Claude Code の stdin JSON とコストキャッシュを読み取り、フォーマットされたステータスラインを出力します。
-3. `refresh` は `~/.claude/projects/**/*.jsonl` をスキャンし、トークン使用量を抽出、モデル別価格を適用して `~/.cc-costline/cache.json` に書き込みます。
-4. Claude 使用率は `api.anthropic.com/api/oauth/usage` から取得され、セッションごとにキャッシュされます（10 分 TTL フォールバック、`/tmp/sl-claude-usage`）。
-5. ccclub ランキングは `ccclub.dev/api/rank` から取得され、セッションごとにキャッシュされます（10 分 TTL フォールバック、`/tmp/sl-ccclub-rank`）。
+2. `render` は毎回の対話時に Claude Code から呼び出され、stdin JSON からセッションデータを読み取り、すべてのデータソースをキャッシュ期限切れ時にインラインで更新します（統一 2 分 TTL）：
+   - **ローカルコスト**：`~/.claude/projects/**/*.jsonl` をスキャン、モデル別価格を適用 → `~/.cc-costline/cache.json`
+   - **使用率**：`api.anthropic.com/api/oauth/usage` から取得 → `/tmp/sl-claude-usage`
+   - **ccclub ランキング**：`ccclub.dev/api/rank` から取得 → `/tmp/sl-ccclub-rank`
+3. `refresh` は手動実行やセッション終了フックによるキャッシュウォームアップにも使用できます。
 
 <details>
 <summary>料金表</summary>

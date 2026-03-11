@@ -24,7 +24,7 @@ Ouvrez une nouvelle session Claude Code et la statusline enrichie apparaîtra. N
 |---------|---------|-------------|
 | Tokens ~ Coût / Contexte | `14.6k ~ $2.42 / 40% by Opus 4.6` | Nombre de tokens, coût, utilisation du contexte et modèle |
 | Limites d'utilisation | `5h: 45% / 7d: 8%` | Utilisation Claude sur 5 heures et 7 jours (colorée comme le contexte). À 100 %, affiche un compte à rebours : `5h:-3:20` |
-| Coût périodique | `30d: $866` | Coût cumulé glissant (configurable : 7j ou 30j) |
+| Coût périodique | `30d: $866` | Coût cumulé glissant (configurable : 7j, 30j ou both) |
 | Classement | `#2/22 $67.0` | Rang [ccclub](https://github.com/mazzzystar/ccclub) (si installé) |
 
 ### Couleurs
@@ -53,11 +53,12 @@ cc-costline config --period both # Afficher les deux périodes
 
 ## Fonctionnement
 
-1. `install` configure `~/.claude/settings.json` — définit la commande statusline et ajoute des hooks de fin de session pour le rafraîchissement automatique. Vos paramètres existants sont préservés.
-2. `render` lit le JSON stdin de Claude Code et le cache des coûts, puis produit la statusline formatée.
-3. `refresh` parcourt `~/.claude/projects/**/*.jsonl`, extrait l'utilisation des tokens, applique la tarification par modèle et écrit dans `~/.cc-costline/cache.json`.
-4. L'utilisation Claude est récupérée depuis `api.anthropic.com/api/oauth/usage`, mise en cache par session avec un TTL de 10 minutes dans `/tmp/sl-claude-usage`.
-5. Le rang ccclub est récupéré depuis `ccclub.dev/api/rank`, mis en cache par session avec un TTL de 10 minutes dans `/tmp/sl-ccclub-rank`.
+1. `install` configure `~/.claude/settings.json` — définit la commande statusline et ajoute des hooks de fin de session. Vos paramètres existants sont préservés.
+2. `render` est appelé par Claude Code à chaque tour de conversation. Il lit le JSON stdin pour les données de session, puis rafraîchit toutes les sources de données en ligne lorsque leur cache expire (TTL unifié de 2 minutes) :
+   - **Coût local** : parcourt `~/.claude/projects/**/*.jsonl`, applique la tarification par modèle → `~/.cc-costline/cache.json`
+   - **Limites d'utilisation** : récupère depuis `api.anthropic.com/api/oauth/usage` → `/tmp/sl-claude-usage`
+   - **Rang ccclub** : récupère depuis `ccclub.dev/api/rank` → `/tmp/sl-ccclub-rank`
+3. `refresh` peut aussi être exécuté manuellement ou via les hooks de fin de session pour préchauffer le cache.
 
 <details>
 <summary>Grille tarifaire</summary>

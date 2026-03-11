@@ -24,7 +24,7 @@ Open a new Claude Code session and you'll see the enhanced statusline. Requires 
 |---------|---------|-------------|
 | Tokens ~ Cost / Context | `14.6k ~ $2.42 / 40% by Opus 4.6` | Session token count, cost, context usage, and model |
 | Usage limits | `5h: 45% / 7d: 8%` | Claude 5-hour and 7-day utilization (auto-colored like context). At 100%, shows countdown: `5h:-3:20` |
-| Period cost | `30d: $866` | Rolling cost total (configurable: 7d or 30d) |
+| Period cost | `30d: $866` | Rolling cost total (configurable: 7d, 30d, or both) |
 | Leaderboard | `#2/22 $67.0` | [ccclub](https://github.com/mazzzystar/ccclub) rank (if installed) |
 
 ### Colors
@@ -53,11 +53,12 @@ cc-costline config --period both # Show both periods
 
 ## How it works
 
-1. `install` configures `~/.claude/settings.json` — sets the statusline command and adds session-end hooks for auto-refresh. Your existing settings are preserved.
-2. `render` reads Claude Code's stdin JSON and the cost cache, outputs the formatted statusline.
-3. `refresh` scans `~/.claude/projects/**/*.jsonl`, extracts token usage, applies per-model pricing, and writes to `~/.cc-costline/cache.json`.
-4. Claude usage is fetched from `api.anthropic.com/api/oauth/usage`, cached per session with a 10-minute TTL fallback at `/tmp/sl-claude-usage`.
-5. ccclub rank is fetched from `ccclub.dev/api/rank`, cached per session with a 10-minute TTL fallback at `/tmp/sl-ccclub-rank`.
+1. `install` configures `~/.claude/settings.json` — sets the statusline command and adds session-end hooks. Your existing settings are preserved.
+2. `render` is called by Claude Code on every turn. It reads stdin JSON for session data, then refreshes all data sources inline when their cache expires (2-minute TTL):
+   - **Local cost**: scans `~/.claude/projects/**/*.jsonl`, applies per-model pricing → `~/.cc-costline/cache.json`
+   - **Usage limits**: fetches `api.anthropic.com/api/oauth/usage` → `/tmp/sl-claude-usage`
+   - **ccclub rank**: fetches `ccclub.dev/api/rank` → `/tmp/sl-ccclub-rank`
+3. `refresh` can also be run manually or via session-end hooks to warm the cost cache.
 
 <details>
 <summary>Pricing table</summary>
