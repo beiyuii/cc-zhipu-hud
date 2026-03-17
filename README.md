@@ -54,10 +54,10 @@ cc-costline config --period both # Show both periods
 ## How it works
 
 1. `install` configures `~/.claude/settings.json` — sets the statusline command and adds session-end hooks. Your existing settings are preserved.
-2. `render` is called by Claude Code on every turn. It reads stdin JSON for session data, then refreshes all data sources inline when their cache expires (2-minute TTL):
-   - **Local cost**: scans `~/.claude/projects/**/*.jsonl`, applies per-model pricing → `~/.cc-costline/cache.json`
-   - **Usage limits**: fetches `api.anthropic.com/api/oauth/usage` → `/tmp/sl-claude-usage`
-   - **ccclub rank**: fetches `ccclub.dev/api/rank` → `/tmp/sl-ccclub-rank`
+2. `render` is called by Claude Code on every turn. It reads stdin JSON for session data, then refreshes data sources inline with separate TTLs:
+   - **Local cost** (2-min TTL): scans `~/.claude/projects/**/*.jsonl`, applies per-model pricing → `~/.cc-costline/cache.json`
+   - **Usage limits** (5-min retry, token-aware): fetches `api.anthropic.com/api/oauth/usage` → `/tmp/sl-claude-usage`. Detects OAuth token rotation to retry immediately with fresh rate limit quota. Stale data persists across failures.
+   - **ccclub rank** (5-min retry): fetches `ccclub.dev/api/rank` → `/tmp/sl-ccclub-rank`
 3. `refresh` can also be run manually or via session-end hooks to warm the cost cache.
 
 <details>

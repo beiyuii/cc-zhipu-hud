@@ -54,10 +54,10 @@ cc-costline config --period both # 両方の期間を表示
 ## 仕組み
 
 1. `install` は `~/.claude/settings.json` を設定 — ステータスラインコマンドとセッション終了フックを追加します。既存の設定は保持されます。
-2. `render` は毎回の対話時に Claude Code から呼び出され、stdin JSON からセッションデータを読み取り、すべてのデータソースをキャッシュ期限切れ時にインラインで更新します（統一 2 分 TTL）：
-   - **ローカルコスト**：`~/.claude/projects/**/*.jsonl` をスキャン、モデル別価格を適用 → `~/.cc-costline/cache.json`
-   - **使用率**：`api.anthropic.com/api/oauth/usage` から取得 → `/tmp/sl-claude-usage`
-   - **ccclub ランキング**：`ccclub.dev/api/rank` から取得 → `/tmp/sl-ccclub-rank`
+2. `render` は毎回の対話時に Claude Code から呼び出され、stdin JSON からセッションデータを読み取り、各データソースを個別の TTL でインライン更新します：
+   - **ローカルコスト**（2 分 TTL）：`~/.claude/projects/**/*.jsonl` をスキャン、モデル別価格を適用 → `~/.cc-costline/cache.json`
+   - **使用率**（5 分リトライ、トークンローテーション検知）：`api.anthropic.com/api/oauth/usage` から取得 → `/tmp/sl-claude-usage`。OAuth トークンのローテーションを検知し、即座にリトライ（新トークン＝新レート制限枠）。API 失敗時も過去のデータを保持。
+   - **ccclub ランキング**（5 分リトライ）：`ccclub.dev/api/rank` から取得 → `/tmp/sl-ccclub-rank`
 3. `refresh` は手動実行やセッション終了フックによるキャッシュウォームアップにも使用できます。
 
 <details>

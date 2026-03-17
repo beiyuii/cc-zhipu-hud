@@ -54,10 +54,10 @@ cc-costline config --period both # Afficher les deux périodes
 ## Fonctionnement
 
 1. `install` configure `~/.claude/settings.json` — définit la commande statusline et ajoute des hooks de fin de session. Vos paramètres existants sont préservés.
-2. `render` est appelé par Claude Code à chaque tour de conversation. Il lit le JSON stdin pour les données de session, puis rafraîchit toutes les sources de données en ligne lorsque leur cache expire (TTL unifié de 2 minutes) :
-   - **Coût local** : parcourt `~/.claude/projects/**/*.jsonl`, applique la tarification par modèle → `~/.cc-costline/cache.json`
-   - **Limites d'utilisation** : récupère depuis `api.anthropic.com/api/oauth/usage` → `/tmp/sl-claude-usage`
-   - **Rang ccclub** : récupère depuis `ccclub.dev/api/rank` → `/tmp/sl-ccclub-rank`
+2. `render` est appelé par Claude Code à chaque tour de conversation. Il lit le JSON stdin pour les données de session, puis rafraîchit les sources de données avec des TTL séparés :
+   - **Coût local** (TTL 2 min) : parcourt `~/.claude/projects/**/*.jsonl`, applique la tarification par modèle → `~/.cc-costline/cache.json`
+   - **Limites d'utilisation** (retry 5 min, sensible au token) : récupère depuis `api.anthropic.com/api/oauth/usage` → `/tmp/sl-claude-usage`. Détecte la rotation du token OAuth pour relancer immédiatement (nouveau token = nouveau quota de débit). Les données périmées persistent en cas d'échec.
+   - **Rang ccclub** (retry 5 min) : récupère depuis `ccclub.dev/api/rank` → `/tmp/sl-ccclub-rank`
 3. `refresh` peut aussi être exécuté manuellement ou via les hooks de fin de session pour préchauffer le cache.
 
 <details>
