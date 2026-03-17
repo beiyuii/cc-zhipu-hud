@@ -47,7 +47,8 @@ test/
 
 ## Key Design Decisions
 
-- **TTL-based caching**: All data sources use a unified 2-minute TTL (`CACHE_TTL_MS`), refreshed inline during render
+- **TTL-based caching**: All data sources use a unified 2-minute TTL (`CACHE_TTL_MS`), refreshed inline during render; local cost cache also refreshes immediately when transcript mtime is newer than cache
+- **Model name shortening**: `display_name` is shortened (e.g. "Opus 4.6 (1M context)" → "Opus 4.6 (1M)")
 - **No User-Agent header**: The Anthropic usage API rate-limits requests with `claude-code` User-Agent
 - **Failure caching**: On API failure, a cache entry with null data is written to prevent retry floods
 - **Deduplication**: Token cost collection deduplicates by requestId; fallback key includes model + all token types to avoid false dedup
@@ -56,8 +57,8 @@ test/
 
 ## Tests
 
-60 tests across 5 files (~79% line coverage, ~89% function coverage):
-- `statusline.test.ts`: formatTokens, formatCost, ctxColor, formatCountdown, rankColor
+63 tests across 5 files (~79% line coverage, ~89% function coverage):
+- `statusline.test.ts`: formatTokens, formatCost, ctxColor, formatCountdown, rankColor, shouldRefreshLocalCostCache
 - `calculator.test.ts`: getPricing (exact/family/unknown fallback), calculateCost
 - `cache.test.ts`: readCache/writeCache/readConfig/writeConfig roundtrip, missing file, invalid JSON
 - `collector.test.ts`: collectCosts with mock jsonl — dedup (with/without requestId), 7d/30d split, nested dirs, cache tokens, model pricing, error handling
