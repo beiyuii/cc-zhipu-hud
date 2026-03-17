@@ -39,20 +39,20 @@ test/
 
 1. Claude Code calls `cc-costline render` on every turn, passing session JSON via stdin
 2. `render()` reads stdin JSON for session cost/model/context, reads transcript for token count
-3. Three data sources are refreshed inline when their cache expires (unified 2-min TTL):
-   - **Local cost** (`~/.cc-costline/cache.json`): `collectCosts()` scans all `.jsonl` files
-   - **Usage API** (`/tmp/sl-claude-usage`): fetches `api.anthropic.com/api/oauth/usage` via curl
-   - **ccclub rank** (`/tmp/sl-ccclub-rank`): fetches `ccclub.dev/api/rank` via curl
+3. Three data sources are refreshed inline with separate TTLs:
+   - **Local cost** (`~/.cc-costline/cache.json`): `collectCosts()` scans all `.jsonl` files (2-min TTL)
+   - **Usage API** (`/tmp/sl-claude-usage`): fetches `api.anthropic.com/api/oauth/usage` via curl (5-min retry, token-aware)
+   - **ccclub rank** (`/tmp/sl-ccclub-rank`): fetches `ccclub.dev/api/rank` via curl (5-min retry)
 4. `install` also sets `SessionEnd`/`Stop` hooks to run `cc-costline refresh` (legacy, kept for cache warmth)
 
 ## Key Design Decisions
 
-- **TTL-based caching**: All data sources use a unified 2-minute TTL (`CACHE_TTL_MS`), refreshed inline during render; local cost cache also refreshes immediately when transcript mtime is newer than cache
+- **Split TTL caching**: Local cost uses 2-min TTL (`CACHE_TTL_MS`); external APIs use 5-min retry throttle (`API_RETRY_TTL_MS`). Local cost cache also refreshes immediately when transcript mtime is newer than cache
+- **Token-aware retry**: Usage API cache tracks the OAuth token prefix; when Claude Code rotates the token, retry fires immediately (new token = fresh rate limit quota)
+- **Resilient stale fallback**: API failures never overwrite cached data; `lastAttempt` is updated separately from `data`, so stale data persists across any number of failures
 - **Model name shortening**: `display_name` is shortened (e.g. "Opus 4.6 (1M context)" → "Opus 4.6 (1M)")
 - **No User-Agent header**: The Anthropic usage API rate-limits requests with `claude-code` User-Agent
-- **Failure caching**: On API failure, a cache entry with null data is written to prevent retry floods
 - **Deduplication**: Token cost collection deduplicates by requestId; fallback key includes model + all token types to avoid false dedup
-- **Stale fallback**: If API fetch fails or collectCosts returns 0 with existing non-zero cache, retains stale data
 - **Safe settings**: `readSettings()` aborts if `settings.json` exists but is invalid JSON, preventing config wipe
 
 ## Tests

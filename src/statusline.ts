@@ -6,8 +6,10 @@ import { readCache, writeCache, readConfig } from "./cache.js";
 import type { CacheData } from "./cache.js";
 import { collectCosts } from "./collector.js";
 
-// Unified TTL for all cached data (2 minutes)
+// TTL for local cost cache (2 minutes)
 const CACHE_TTL_MS = 120_000;
+// TTL for external API retry throttle (5 minutes) — usage API has strict per-token rate limits (~5 req/token)
+const API_RETRY_TTL_MS = 300_000;
 
 // ANSI colors (matching original statusline.sh)
 const FG_GRAY      = "\x1b[38;5;245m";
@@ -69,20 +71,23 @@ export function shouldRefreshLocalCostCache(
   return now - cacheUpdatedAt >= CACHE_TTL_MS;
 }
 
-// ccclub rank fetcher — TTL-based cache (stale fallback on failure)
+// ccclub rank fetcher — split cache: data persists, retry throttled
 function getCcclubRank(): { rank: number; total: number; cost: number } | null {
   const configPath = join(homedir(), ".ccclub", "config.json");
   if (!existsSync(configPath)) return null;
   const cacheFile = "/tmp/sl-ccclub-rank";
+  const now = Date.now();
   let staleData: { rank: number; total: number; cost: number } | null = null;
+  let lastAttempt = 0;
   if (existsSync(cacheFile)) {
     try {
       const cached = JSON.parse(readFileSync(cacheFile, "utf-8"));
       staleData = cached.data ?? null;
-      const cacheAge = Date.now() - (cached.timestamp || 0);
-      if (cacheAge < CACHE_TTL_MS) return staleData;
+      lastAttempt = cached.lastAttempt || cached.timestamp || 0;
+      if (now - lastAttempt < API_RETRY_TTL_MS) return staleData;
     } catch { }
   }
+  try { writeFileSync(cacheFile, JSON.stringify({ data: staleData, timestamp: staleData ? (lastAttempt || now) : 0, lastAttempt: now }), "utf-8"); } catch {}
   try {
     const config = JSON.parse(readFileSync(configPath, "utf-8"));
     const code = config.groups?.[0];
@@ -97,10 +102,9 @@ function getCcclubRank(): { rank: number; total: number; cost: number } | null {
     const me = rankings.find((r: any) => r.userId === userId);
     if (!me) return staleData;
     const result = { rank: me.rank, total: rankings.length, cost: me.costUSD };
-    writeFileSync(cacheFile, JSON.stringify({ data: result, timestamp: Date.now() }), "utf-8");
+    writeFileSync(cacheFile, JSON.stringify({ data: result, timestamp: now, lastAttempt: now }), "utf-8");
     return result;
   } catch {
-    try { writeFileSync(cacheFile, JSON.stringify({ data: staleData, timestamp: Date.now() }), "utf-8"); } catch {}
     return staleData;
   }
 }
@@ -112,39 +116,57 @@ export function rankColor(rank: number): string {
   return FG_CYAN;
 }
 
-// Claude usage fetcher — TTL-based cache (stale fallback on failure)
+// Claude usage fetcher — token-aware cache: detects token rotation to retry immediately
 function getClaudeUsage(): { fiveHour: number; sevenDay: number; fiveHourResetsAt?: number } | null {
   const cacheFile = "/tmp/sl-claude-usage";
   const hitFile = "/tmp/sl-claude-usage-hit";
   const now = Date.now();
+  // Cache format: { data, lastAttempt, tokenPrefix (first 20 chars of token) }
   let staleData: { fiveHour: number; sevenDay: number; fiveHourResetsAt?: number } | null = null;
+  let lastAttempt = 0;
+  let cachedTokenPrefix = "";
   if (existsSync(cacheFile)) {
     try {
       const cached = JSON.parse(readFileSync(cacheFile, "utf-8"));
       staleData = cached.data ?? null;
-      const cacheAge = now - (cached.timestamp || 0);
-      if (cacheAge < CACHE_TTL_MS) return staleData;
+      lastAttempt = cached.lastAttempt || 0;
+      cachedTokenPrefix = cached.tokenPrefix || "";
     } catch { }
   }
+
+  // Get current token
+  let accessToken = "";
   try {
     const username = process.env.USER || process.env.USERNAME;
     const keychainCmd = `security find-generic-password -s "Claude Code-credentials" -a "${username}" -w 2>/dev/null`;
     const credentialsJSON = execSync(keychainCmd, { encoding: "utf-8", timeout: 2000 }).trim();
-    if (!credentialsJSON) return null;
+    if (!credentialsJSON) return staleData;
     const credentials = JSON.parse(credentialsJSON);
-    const accessToken = credentials.claudeAiOauth?.accessToken;
-    if (!accessToken) return null;
+    accessToken = credentials.claudeAiOauth?.accessToken || "";
+    if (!accessToken) return staleData;
     const expiresAt = credentials.claudeAiOauth?.expiresAt;
-    if (expiresAt && Date.now() / 1000 > expiresAt) return null;
+    if (expiresAt && now > expiresAt) return staleData;
+  } catch {
+    return staleData;
+  }
+
+  const currentTokenPrefix = accessToken.slice(-20);
+  const tokenChanged = cachedTokenPrefix && currentTokenPrefix !== cachedTokenPrefix;
+
+  // Throttle: skip API call unless token rotated or TTL expired
+  if (!tokenChanged && lastAttempt && now - lastAttempt < API_RETRY_TTL_MS) return staleData;
+
+  // Mark attempt and store token prefix
+  try { writeFileSync(cacheFile, JSON.stringify({ data: staleData, lastAttempt: now, tokenPrefix: currentTokenPrefix }), "utf-8"); } catch {}
+
+  try {
     const apiUrl = "https://api.anthropic.com/api/oauth/usage";
     const curlCmd = `curl -sf "${apiUrl}" -H "Authorization: Bearer ${accessToken}" -H "anthropic-beta: oauth-2025-04-20"`;
     const response = execSync(curlCmd, { encoding: "utf-8", timeout: 5000 });
-    if (!response) {
-      // API failed — write cache with null data to prevent retry flood
-      writeFileSync(cacheFile, JSON.stringify({ data: null, timestamp: now }), "utf-8");
-      return staleData;
-    }
+    if (!response) return staleData;
     const data = JSON.parse(response);
+    // Debug: save raw API response for diagnosis
+    try { writeFileSync("/tmp/sl-claude-usage-raw", JSON.stringify(data, null, 2), "utf-8"); } catch {}
     const parseUtil = (val: any): number => {
       if (typeof val === "number") return Math.round(val);
       if (typeof val === "string") return Math.round(parseFloat(val.replace("%", "")));
@@ -182,11 +204,9 @@ function getClaudeUsage(): { fiveHour: number; sevenDay: number; fiveHourResetsA
 
     const result: { fiveHour: number; sevenDay: number; fiveHourResetsAt?: number } = { fiveHour, sevenDay };
     if (fiveHourResetsAt) result.fiveHourResetsAt = fiveHourResetsAt;
-    writeFileSync(cacheFile, JSON.stringify({ data: result, timestamp: now }), "utf-8");
+    writeFileSync(cacheFile, JSON.stringify({ data: result, lastAttempt: now, tokenPrefix: currentTokenPrefix }), "utf-8");
     return result;
   } catch {
-    // Write cache with stale/null data to prevent retry flood on persistent failures
-    try { writeFileSync(cacheFile, JSON.stringify({ data: staleData, timestamp: now }), "utf-8"); } catch {}
     return staleData;
   }
 }
