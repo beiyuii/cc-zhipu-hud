@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import { execSync } from "node:child_process";
 import { readCache, writeCache, readConfig } from "./cache.js";
+import type { CacheData } from "./cache.js";
 import { collectCosts } from "./collector.js";
 
 // Unified TTL for all cached data (2 minutes)
@@ -46,6 +47,26 @@ export function formatCountdown(resetsAtMs: number): string {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   return `-${hours}:${String(minutes).padStart(2, "0")}`;
+}
+
+export function shouldRefreshLocalCostCache(
+  cache: CacheData | null,
+  transcriptPath = "",
+  now = Date.now(),
+): boolean {
+  if (!cache) return true;
+
+  const cacheUpdatedAt = new Date(cache.updatedAt).getTime();
+  if (isNaN(cacheUpdatedAt)) return true;
+
+  if (transcriptPath) {
+    try {
+      const transcriptMtime = statSync(transcriptPath).mtimeMs;
+      if (transcriptMtime > cacheUpdatedAt) return true;
+    } catch { }
+  }
+
+  return now - cacheUpdatedAt >= CACHE_TTL_MS;
 }
 
 // ccclub rank fetcher — TTL-based cache (stale fallback on failure)
@@ -180,7 +201,7 @@ export function render(input: string): string {
 
   // Session data from Claude Code stdin
   const cost = data.cost?.total_cost_usd ?? 0;
-  const model = data.model?.display_name ?? "—";
+  const model = (data.model?.display_name ?? "—").replace(/\s*\((\d+[KMB])\s+context\)/i, " ($1)");
   const contextPct = Math.floor(data.context_window?.used_percentage ?? 0);
 
   const transcriptPath = data.transcript_path ?? "";
@@ -205,8 +226,7 @@ export function render(input: string): string {
 
   // Refresh local cost cache if stale
   let cache = readCache();
-  const cacheAge = cache ? Date.now() - new Date(cache.updatedAt).getTime() : Infinity;
-  if (cacheAge >= CACHE_TTL_MS) {
+  if (shouldRefreshLocalCostCache(cache, transcriptPath)) {
     try {
       const result = collectCosts();
       // Don't overwrite valid cache with zeros (directory read failure)

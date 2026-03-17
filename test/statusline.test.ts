@@ -1,11 +1,15 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import {
   formatTokens,
   formatCost,
   ctxColor,
   formatCountdown,
   rankColor,
+  shouldRefreshLocalCostCache,
 } from "../dist/statusline.js";
 
 describe("formatTokens", () => {
@@ -102,5 +106,54 @@ describe("rankColor", () => {
   it("returns cyan for others", () => {
     assert.equal(rankColor(4), "\x1b[38;5;109m");
     assert.equal(rankColor(10), "\x1b[38;5;109m");
+  });
+});
+
+describe("shouldRefreshLocalCostCache", () => {
+  it("refreshes when cache is missing", () => {
+    assert.equal(shouldRefreshLocalCostCache(null, ""), true);
+  });
+
+  it("refreshes immediately when transcript is newer than cache", () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "cc-costline-statusline-"));
+    try {
+      const transcriptPath = join(tmpDir, "session.jsonl");
+      writeFileSync(transcriptPath, "{}\n");
+
+      const now = new Date("2026-03-17T10:00:00.000Z");
+      utimesSync(transcriptPath, now, now);
+
+      const cache = {
+        cost7d: 1,
+        cost30d: 2,
+        updatedAt: new Date(now.getTime() - 5_000).toISOString(),
+      };
+
+      assert.equal(shouldRefreshLocalCostCache(cache, transcriptPath, now.getTime()), true);
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps fresh cache when transcript has not changed", () => {
+    const tmpDir = mkdtempSync(join(tmpdir(), "cc-costline-statusline-"));
+    try {
+      const transcriptPath = join(tmpDir, "session.jsonl");
+      writeFileSync(transcriptPath, "{}\n");
+
+      const now = new Date("2026-03-17T10:00:00.000Z");
+      const transcriptTime = new Date(now.getTime() - 10_000);
+      utimesSync(transcriptPath, transcriptTime, transcriptTime);
+
+      const cache = {
+        cost7d: 1,
+        cost30d: 2,
+        updatedAt: new Date(now.getTime() - 5_000).toISOString(),
+      };
+
+      assert.equal(shouldRefreshLocalCostCache(cache, transcriptPath, now.getTime()), false);
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
   });
 });
