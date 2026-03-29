@@ -12,8 +12,8 @@ import { writeCache, writeConfig, readConfig, CACHE_DIR } from "./cache.js";
 import { render } from "./statusline.js";
 
 const SETTINGS_PATH = join(homedir(), ".claude", "settings.json");
-const RENDER_COMMAND = "cc-zhipu-hud render";
-const REFRESH_COMMAND = "cc-zhipu-hud refresh";
+const RENDER_COMMAND = "cc-costline render";
+const REFRESH_COMMAND = "cc-costline refresh";
 
 // ─── Helpers ──────────────────────────────────────────────
 
@@ -34,169 +34,168 @@ function saveSettings(settings: any): void {
 }
 
 function readStdin(): string {
-  const chunks: Buffer[] = [];
-  let chunk: Buffer;
-  // Node 22+ supports readable iterator on process.stdin
-  const stdin = process.stdin as unknown as Iterable<Buffer>;
-  for (chunk of stdin) {
-    chunks.push(chunk);
+  try {
+    return readFileSync("/dev/stdin", "utf-8");
+  } catch {
+    return "";
   }
-  return Buffer.concat(chunks).toString("utf-8");
 }
 
-// ─── Commands ──────────────────────────────────────────────
+// ─── Commands ─────────────────────────────────────────────
 
-function install(): void {
+function cmdInstall(): void {
   const settings = readSettings();
 
-  // Set statusLine command
+  // 1. Set statusLine command
   settings.statusLine = {
     type: "command",
     command: RENDER_COMMAND,
   };
 
-  // Add hooks for cache refresh on session end
+  // 2. Add SessionEnd hook for refresh
   if (!settings.hooks) settings.hooks = {};
-  if (!settings.hooks.SessionEnd) settings.hooks.SessionEnd = [];
-  if (!settings.hooks.SessionEnd.includes(REFRESH_COMMAND)) {
-    settings.hooks.SessionEnd.push(REFRESH_COMMAND);
-  }
-  if (!settings.hooks.Stop) settings.hooks.Stop = [];
-  if (!settings.hooks.Stop.includes(REFRESH_COMMAND)) {
-    settings.hooks.Stop.push(REFRESH_COMMAND);
+
+  for (const event of ["SessionEnd", "Stop"] as const) {
+    if (!settings.hooks[event]) settings.hooks[event] = [];
+
+    // Remove any old cc-costline / cc-statusline hooks first
+    settings.hooks[event] = settings.hooks[event].filter(
+      (h: any) => !h.hooks?.some((hh: any) =>
+        hh.command?.includes("cc-costline") || hh.command?.includes("cc-statusline")
+      )
+    );
+
+    // Add fresh hook
+    settings.hooks[event].push({
+      matcher: "",
+      hooks: [
+        {
+          type: "command",
+          command: REFRESH_COMMAND,
+          timeout: 60,
+          async: true,
+        },
+      ],
+    });
   }
 
   saveSettings(settings);
 
-  // Ensure cache directory exists
+  // 3. Create config dir + default config
   mkdirSync(CACHE_DIR, { recursive: true });
+  if (!existsSync(join(CACHE_DIR, "config.json"))) {
+    writeConfig({ period: "7d" });
+  }
 
-  console.log("✓ cc-zhipu-hud installed!");
-  console.log("");
-  console.log("  Open a new Claude Code session to see the enhanced statusline.");
-  console.log("");
-  console.log("  Features:");
-  console.log("    • Session tokens, cost, context usage, model");
-  console.log("    • Zhipu AI/GLM balance (when using bigmodel.cn proxy)");
-  console.log("    • Claude usage limits (5h/7d) for official API");
-  console.log("    • 7d/30d cost tracking");
-  console.log("");
-  console.log("  Commands:");
-  console.log("    cc-zhipu-hud config --period 7d   # Show 7-day cost");
-  console.log("    cc-zhipu-hud config --period 30d  # Show 30-day cost");
-  console.log("    cc-zhipu-hud config --period both # Show both periods");
-  console.log("    cc-zhipu-hud refresh             # Recalculate cost cache");
+  // 4. Initial refresh
+  console.log("✓ settings.json updated (statusLine + hooks)");
+  console.log("✓ Config directory created: " + CACHE_DIR);
+  console.log("  Running initial cost calculation...");
+  cmdRefresh();
+  console.log("✓ Installation complete!");
 }
 
-function uninstall(): void {
+function cmdUninstall(): void {
   const settings = readSettings();
 
-  if (settings.statusLine?.command === RENDER_COMMAND) {
+  // Remove statusLine if it's ours
+  if (settings.statusLine?.command?.includes("cc-costline") ||
+      settings.statusLine?.command?.includes("cc-statusline")) {
     delete settings.statusLine;
   }
 
-  if (Array.isArray(settings.hooks?.SessionEnd)) {
-    settings.hooks.SessionEnd = settings.hooks.SessionEnd.filter(
-      (cmd: string) => cmd !== REFRESH_COMMAND
+  // Remove our hooks from SessionEnd and Stop
+  for (const event of ["SessionEnd", "Stop"] as const) {
+    if (!settings.hooks?.[event]) continue;
+    settings.hooks[event] = settings.hooks[event].filter(
+      (h: any) => !h.hooks?.some((hh: any) =>
+        hh.command?.includes("cc-costline") || hh.command?.includes("cc-statusline")
+      )
     );
-  }
-  if (Array.isArray(settings.hooks?.Stop)) {
-    settings.hooks.Stop = settings.hooks.Stop.filter(
-      (cmd: string) => cmd !== REFRESH_COMMAND
-    );
+    if (settings.hooks[event].length === 0) {
+      delete settings.hooks[event];
+    }
   }
 
   saveSettings(settings);
-  console.log("✓ cc-zhipu-hud uninstalled.");
+  console.log("✓ Removed cc-costline from settings.json");
+  console.log("  Cache directory preserved at: " + CACHE_DIR);
 }
 
-function refresh(): void {
-  try {
-    const result = collectCosts();
-    const cache = { cost7d: result.cost7d, cost30d: result.cost30d, updatedAt: new Date().toISOString() };
-    writeCache(cache);
-    console.log(`✓ Cost cache refreshed: 7d=$${result.cost7d.toFixed(2)}, 30d=$${result.cost30d.toFixed(2)}`);
-  } catch (error) {
-    console.error("✗ Failed to refresh cost cache:", error);
-  }
-}
-
-function config(args: string[]): void {
-  const arg = args[0];
-  if (arg === "--period") {
-    const period = args[1];
-    if (period === "7d" || period === "30d" || period === "both") {
-      writeConfig({ period });
-      console.log(`✓ Period set to ${period}`);
-    } else {
-      console.error("✗ Period must be 7d, 30d, or both");
-    }
-  } else {
-    const currentConfig = readConfig();
-    console.log("Current config:");
-    console.log(`  period: ${currentConfig.period}`);
-  }
-}
-
-function renderCmd(): void {
-  const input = readStdin();
-  if (process.stdin.isTTY) {
-    // When called directly (e.g., cc-zhipu-hud render without stdin)
-    // This happens during setup verification
-    console.log("");
+function cmdConfig(args: string[]): void {
+  const periodIdx = args.indexOf("--period");
+  if (periodIdx === -1 || !args[periodIdx + 1]) {
+    const config = readConfig();
+    console.log("Current config:", JSON.stringify(config, null, 2));
+    console.log("\nUsage: cc-costline config --period <7d|30d|both>");
     return;
   }
-  if (!input.trim()) return;
-  const output = render(input);
-  if (output) console.log(output);
+
+  const period = args[periodIdx + 1];
+  if (!["7d", "30d", "both"].includes(period)) {
+    console.error("Invalid period. Use: 7d, 30d, or both");
+    process.exit(1);
+  }
+
+  writeConfig({ period: period as "7d" | "30d" | "both" });
+  console.log(`✓ Period set to: ${period}`);
 }
 
-// ─── Main ──────────────────────────────────────────────
+function cmdRefresh(): void {
+  const result = collectCosts();
+  writeCache({
+    cost7d: result.cost7d,
+    cost30d: result.cost30d,
+    updatedAt: new Date().toISOString(),
+  });
+  console.log(
+    `✓ Cache updated — 7d: $${result.cost7d.toFixed(2)} | 30d: $${result.cost30d.toFixed(2)}`
+  );
+}
 
-const [cmd, ...args] = process.argv.slice(2);
+function cmdRender(): void {
+  const input = readStdin();
+  if (!input.trim()) return;
+  const output = render(input);
+  if (output) process.stdout.write(output);
+}
 
-switch (cmd) {
+// ─── Main ─────────────────────────────────────────────────
+
+const args = process.argv.slice(2);
+const command = args[0];
+
+switch (command) {
   case "install":
-    install();
+    cmdInstall();
     break;
   case "uninstall":
-    uninstall();
-    break;
-  case "refresh":
-    refresh();
+    cmdUninstall();
     break;
   case "config":
-    config(args);
+    cmdConfig(args.slice(1));
+    break;
+  case "refresh":
+    cmdRefresh();
     break;
   case "render":
-    renderCmd();
-    break;
-  case "version":
-  case "-v":
-  case "--version":
-    console.log(`cc-zhipu-hud v${pkg.version}`);
-    break;
-  case "help":
-  case "-h":
-  case "--help":
-    console.log(`cc-zhipu-hud v${pkg.version} - Enhanced statusline for Claude Code with Zhipu AI support`);
-    console.log("");
-    console.log("Usage:");
-    console.log("  cc-zhipu-hud install              Set up Claude Code integration");
-    console.log("  cc-zhipu-hud uninstall            Remove from settings");
-    console.log("  cc-zhipu-hud refresh              Manually recalculate cost cache");
-    console.log("  cc-zhipu-hud config --period 7d   Show 7-day cost (default)");
-    console.log("  cc-zhipu-hud config --period 30d  Show 30-day cost");
-    console.log("  cc-zhipu-hud config --period both Show both periods");
-    console.log("  cc-zhipu-hud render               Render statusline (called by Claude Code)");
+    cmdRender();
     break;
   default:
-    if (!cmd) {
-      console.log(`cc-zhipu-hud v${pkg.version}`);
-      console.log("Run `cc-zhipu-hud help` for usage.");
-    } else {
-      console.error(`Unknown command: ${cmd}`);
-      console.error("Run `cc-zhipu-hud help` for usage.");
-      process.exit(1);
-    }
+    console.log(`cc-costline v${pkg.version} — Enhanced statusline for Claude Code
+
+Commands:
+  install     Configure Claude Code to use cc-costline
+  uninstall   Remove cc-costline from Claude Code settings
+  config      View/update display settings
+  refresh     Manually recalculate cost cache
+  render      Output statusline (reads stdin from Claude Code)
+
+Examples:
+  cc-costline install
+  cc-costline config --period 7d
+  cc-costline config --period 30d
+  cc-costline config --period both
+  cc-costline refresh`);
+    break;
 }
