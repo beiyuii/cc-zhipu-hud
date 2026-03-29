@@ -139,27 +139,39 @@ export function getGlmCodingPlanUsage(): GlmCodingPlanUsage | null {
 
     if (!response) return staleData;
 
-    const data = JSON.parse(response);
+    const json = JSON.parse(response);
 
-    // Extract quota data - API returns percentages
-    // Expected response format: { five_hour_percent: number, weekly_percent: number, ... }
-    const fiveHourPercent = Math.round(data.five_hour_percent ?? data.fiveHourPercent ?? 0);
-    const weeklyPercent = Math.round(data.weekly_percent ?? data.weeklyPercent ?? 0);
+    // Check if API returned success
+    if (json.code !== 200 || !json.data?.limits) return staleData;
 
-    // Calculate reset times if available in response
+    // Parse the limits array to find 5-hour TIME_LIMIT and weekly TOKENS_LIMIT
+    const limits = json.data.limits;
+    let fiveHourPercent = 0;
+    let weeklyPercent = 0;
     let fiveHourResetsAt: number | undefined;
     let weeklyResetsAt: number | undefined;
 
-    if (data.five_hour_resets_at || data.fiveHourResetsAt) {
-      const resetAt = data.five_hour_resets_at || data.fiveHourResetsAt;
-      const ts = typeof resetAt === "string" ? new Date(resetAt).getTime() : resetAt * 1000;
-      if (!isNaN(ts) && ts > now) fiveHourResetsAt = ts;
-    }
-
-    if (data.weekly_resets_at || data.weeklyResetsAt) {
-      const resetAt = data.weekly_resets_at || data.weeklyResetsAt;
-      const ts = typeof resetAt === "string" ? new Date(resetAt).getTime() : resetAt * 1000;
-      if (!isNaN(ts) && ts > now) weeklyResetsAt = ts;
+    for (const limit of limits) {
+      // TIME_LIMIT with unit=5 is the 5-hour rolling limit
+      if (limit.type === "TIME_LIMIT" && limit.unit === 5) {
+        fiveHourPercent = Math.round(limit.percentage ?? 0);
+        if (limit.nextResetTime) {
+          const ts = typeof limit.nextResetTime === "string"
+            ? new Date(limit.nextResetTime).getTime()
+            : limit.nextResetTime;
+          if (!isNaN(ts) && ts > now) fiveHourResetsAt = ts;
+        }
+      }
+      // TOKENS_LIMIT with unit=3 is the weekly (7-day) limit
+      if (limit.type === "TOKENS_LIMIT" && limit.unit === 3) {
+        weeklyPercent = Math.round(limit.percentage ?? 0);
+        if (limit.nextResetTime) {
+          const ts = typeof limit.nextResetTime === "string"
+            ? new Date(limit.nextResetTime).getTime()
+            : limit.nextResetTime;
+          if (!isNaN(ts) && ts > now) weeklyResetsAt = ts;
+        }
+      }
     }
 
     const result: GlmCodingPlanUsage = {
