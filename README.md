@@ -1,42 +1,72 @@
-# cc-zhipu-hud
-
 [English](README.md) | [中文](README.zh-CN.md)
 
-Enhanced statusline for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — with **Zhipu AI/GLM balance tracking** support.
+# cc-zhipu-hud
 
-Forked from [cc-costline](https://github.com/Ventuss-OvO/cc-costline) with added support for [Zhipu AI](https://bigmodel.cn/) API proxy users.
+> Enhanced statusline for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) with **Zhipu AI/GLM balance tracking**
 
-## Features
+![cc-zhipu-hud screenshot](screenshot.png)
 
 ```
 14.6k ~ $2.42 / 40% by GLM-5 | Zhipu ¥12.5 · 500k tokens | 30d: $866
 ```
 
+## Why cc-zhipu-hud?
+
+This is a fork of [cc-costline](https://github.com/Ventuss-OvO/cc-costline) specifically enhanced for users who access Claude API through [Zhipu AI](https://bigmodel.cn/) (智谱 AI) proxy.
+
+### Key Differences from cc-costline
+
+| Feature | cc-costline | **cc-zhipu-hud** |
+|---------|-------------|------------------|
+| Claude usage limits | ✅ 5h/7d limits | ✅ (official API only) |
+| **Zhipu balance** | ❌ | ✅ **Cash + Token packages** |
+| Local cost tracking | ✅ | ✅ |
+| ccclub leaderboard | ✅ | ✅ |
+| Smart API detection | ❌ | ✅ **Automatic mode switching** |
+
+When using Zhipu AI's `bigmodel.cn` proxy, cc-zhipu-hud automatically switches to show your account balance instead of Claude usage limits — which are irrelevant for proxy users.
+
+## Features
+
+### Statusline Segments
+
 | Segment | Example | Description |
 |---------|---------|-------------|
 | Tokens ~ Cost / Context | `14.6k ~ $2.42 / 40% by GLM-5` | Session token count, cost, context usage, and model |
-| **Zhipu Balance** | `Zhipu ¥12.5 · 500k tokens` | **NEW!** Zhipu AI account balance when using bigmodel.cn proxy |
-| ~~Usage limits~~ | ~~`5h: 45% / 7d: 8%`~~ | Claude usage limits (only shown for official API) |
-| Period cost | `30d: $866` | Rolling cost total (configurable: 7d, 30d, or both) |
+| **Zhipu Balance** | `Zhipu ¥12.5 · 500k tokens` | Zhipu AI cash balance + token package balance (proxy mode) |
+| Usage Limits | `5h: 45% / 7d: 8%` | Claude 5h/7d usage (official API mode only) |
+| Period Cost | `30d: $866` | Rolling 7d/30d cost total (configurable) |
 | Leaderboard | `#2/22 $67.0` | [ccclub](https://github.com/mazzzystar/ccclub) rank (if installed) |
 
-### Smart API Detection
+### Smart Mode Detection
 
-- **Zhipu AI users**: Shows account balance (cash + resource packages) instead of usage limits
-- **Official API users**: Shows Claude 5h/7d usage limits as before
-- Detection is automatic based on `ANTHROPIC_BASE_URL` setting
-
-### Colors
-
-- **Context & usage limits** — green (< 60%) → orange (60-79%) → red (≥ 80%)
-- **Zhipu balance** — cyan for cash, purple for resource tokens
-- **Leaderboard rank** — #1 gold, #2 white, #3 orange, others cyan
-- **Period cost** — yellow
-
-## Install
+cc-zhipu-hud automatically detects your API configuration:
 
 ```bash
-# Clone and install
+# ~/.claude/settings.json
+{
+  "env": {
+    "ANTHROPIC_AUTH_TOKEN": "your-api-key",
+    "ANTHROPIC_BASE_URL": "https://open.bigmodel.cn/api/anthropic"  # Zhipu mode
+  }
+}
+```
+
+- **Zhipu mode** (`bigmodel.cn`): Shows account balance
+- **Claude mode** (default/official): Shows usage limits
+
+### Color Indicators
+
+- **Context & Usage** — Green (<60%) → Orange (60-79%) → Red (≥80%)
+- **Zhipu Cash** — Cyan
+- **Zhipu Token Packages** — Purple
+- **Leaderboard** — #1 Gold, #2 White, #3 Orange, others Cyan
+- **Cost** — Yellow
+
+## Installation
+
+```bash
+# Clone and build
 git clone https://github.com/beiyuii/cc-zhipu-hud.git
 cd cc-zhipu-hud
 npm install
@@ -47,19 +77,19 @@ npm link
 cc-zhipu-hud install
 ```
 
-Or install from npm (when published):
+Or via npm (when published):
 
 ```bash
 npm i -g cc-zhipu-hud && cc-zhipu-hud install
 ```
 
-Open a new Claude Code session and you'll see the enhanced statusline. Requires Node.js >= 22.
+**Requirements**: Node.js >= 22
 
 ## Configuration
 
 ### For Zhipu AI Users
 
-Make sure your `~/.claude/settings.json` has:
+Set up your `~/.claude/settings.json`:
 
 ```json
 {
@@ -70,34 +100,42 @@ Make sure your `~/.claude/settings.json` has:
 }
 ```
 
-The HUD will automatically detect Zhipu proxy and show your balance.
+The statusline will automatically show your Zhipu balance.
+
+### Optional: ccclub Leaderboard
+
+Install [ccclub](https://github.com/mazzzystar/ccclub) for friend rankings:
+
+```bash
+npm i -g ccclub && ccclub init
+```
 
 ## Commands
 
 ```bash
 cc-zhipu-hud install              # Set up Claude Code integration
-cc-zhipu-hud uninstall            # Remove from settings
-cc-zhipu-hud refresh              # Manually recalculate cost cache
+cc-zhipu-hud uninstall            # Remove integration
+cc-zhipu-hud refresh              # Refresh cost cache
 cc-zhipu-hud config --period 7d   # Show 7-day cost (default)
 cc-zhipu-hud config --period 30d  # Show 30-day cost
 cc-zhipu-hud config --period both # Show both periods
 ```
 
-## How it works
+## How It Works
 
-1. `install` configures `~/.claude/settings.json` — sets the statusline command and adds session-end hooks.
-2. `render` is called by Claude Code on every turn:
-   - Detects if using Zhipu AI proxy (via `ANTHROPIC_BASE_URL`)
+1. **Install**: Configures `~/.claude/settings.json` with statusline command
+2. **Render** (on every turn):
+   - Detects API type via `ANTHROPIC_BASE_URL`
    - **Zhipu mode**: Fetches balance from `open.bigmodel.cn/api/paas/v4/billing/quota`
    - **Claude mode**: Fetches usage from `api.anthropic.com/api/oauth/usage`
-   - Local cost tracking scans `~/.claude/projects/**/*.jsonl`
-3. Balance/usage data is cached in `/tmp/sl-*` with 1-5 min TTL.
+   - Scans local `~/.claude/projects/**/*.jsonl` for cost tracking
+3. **Cache**: Data cached with 1-5 min TTL in `/tmp/sl-*`
 
 ## Development
 
 ```bash
 npm run build   # Compile TypeScript
-npm test        # Build + run unit tests
+npm test        # Run unit tests
 ```
 
 ## Uninstall
@@ -105,6 +143,7 @@ npm test        # Build + run unit tests
 ```bash
 cc-zhipu-hud uninstall
 npm unlink cc-zhipu-hud
+# or: npm uninstall -g cc-zhipu-hud
 ```
 
 ## Acknowledgments
@@ -115,15 +154,15 @@ npm unlink cc-zhipu-hud
 ## Roadmap
 
 - [ ] Support more GLM model pricing tiers
-- [ ] Add Windows/Linux keychain support for OAuth credentials
-- [ ] Add configurable balance/cost thresholds with alerts
-- [ ] Support custom API endpoints
-- [ ] Add more language translations
+- [ ] Add Windows/Linux keychain support
+- [ ] Configurable balance/cost threshold alerts
+- [ ] Custom API endpoint support
+- [ ] More language translations
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions welcome! Feel free to open a PR or issue.
 
 ## License
 
-MIT
+[MIT](LICENSE) © [beiyuii](https://github.com/beiyuii)
