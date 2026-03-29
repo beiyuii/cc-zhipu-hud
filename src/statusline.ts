@@ -1,17 +1,21 @@
 import { readFileSync, existsSync, statSync, writeFileSync, unlinkSync } from "node:fs";
-import { join } from "node:path";
+import { join, dirname } from "node:path";
 import { homedir } from "node:os";
 import { execSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import { readCache, writeCache, readConfig } from "./cache.js";
+import { getZhipuBalance, isZhipuMode, getGlmCodingPlanUsage } from "./zhipu.js";
 import type { CacheData } from "./cache.js";
 import { collectCosts } from "./collector.js";
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
 // TTL for local cost cache (2 minutes)
 const CACHE_TTL_MS = 120_000;
-// TTL for external API retry throttle (5 minutes) — usage API has strict per-token rate limits (~5 req/token)
+// TTL for external API retry throttle (5 minutes)
 const API_RETRY_TTL_MS = 300_000;
 
-// ANSI colors (matching original statusline.sh)
+// ANSI colors
 const FG_GRAY      = "\x1b[38;5;245m";
 const FG_GRAY_DIM  = "\x1b[38;5;102m";
 const FG_YELLOW    = "\x1b[38;2;229;192;123m";
@@ -21,7 +25,15 @@ const FG_RED       = "\x1b[38;5;167m";
 const FG_MODEL     = "\x1b[38;2;202;124;94m";
 const FG_CYAN      = "\x1b[38;5;109m";
 const FG_WHITE     = "\x1b[38;5;255m";
+const FG_MAGENTA   = "\x1b[38;5;171m";
 const RESET        = "\x1b[0m";
+const DIM          = "\x1b[2m";
+
+const SEPARATOR = ` ${FG_GRAY_DIM}│${RESET} `;
+
+// Unicode characters for progress bar
+const BLOCK_FULL = "█";
+const BLOCK_EMPTY = "░";
 
 export function formatTokens(t: number): string {
   if (t >= 1_000_000) return (t / 1_000_000).toFixed(1) + "M";
@@ -36,10 +48,36 @@ export function formatCost(n: number): string {
   return "$" + n.toFixed(2);
 }
 
-export function ctxColor(pct: number): string {
+export function formatCNY(n: number): string {
+  if (n >= 1000) return "¥" + Math.round(n).toLocaleString("en-US");
+  if (n >= 100) return "¥" + n.toFixed(0);
+  return "¥" + n.toFixed(1);
+}
+
+/**
+ * Generate a visual progress bar
+ * @param percent - Percentage (0-100)
+ * @param width - Total width in characters
+ * @returns Progress bar string like "████░░░░"
+ */
+export function formatBar(percent: number, width = 10): string {
+  const clamped = Math.max(0, Math.min(100, percent));
+  const filled = Math.round(clamped / 100 * width);
+  const empty = width - filled;
+  return BLOCK_FULL.repeat(filled) + BLOCK_EMPTY.repeat(empty);
+}
+
+/**
+ * Get color for percentage-based display
+ */
+export function pctColor(pct: number): string {
   if (pct >= 80) return FG_RED;
   if (pct >= 60) return FG_ORANGE;
   return FG_GREEN;
+}
+
+export function ctxColor(pct: number): string {
+  return pctColor(pct);
 }
 
 export function formatCountdown(resetsAtMs: number): string {
@@ -69,6 +107,19 @@ export function shouldRefreshLocalCostCache(
   }
 
   return now - cacheUpdatedAt >= CACHE_TTL_MS;
+}
+
+/**
+ * Get git status: current branch and whether working dir is dirty
+ */
+function getGitStatus(): { branch: string; dirty: boolean } | null {
+  try {
+    const branch = execSync("git rev-parse --abbrev-ref HEAD", { encoding: "utf-8", timeout: 1000 }).trim();
+    const status = execSync("git status --porcelain", { encoding: "utf-8", timeout: 1000 }).trim();
+    return { branch, dirty: status.length > 0 };
+  } catch {
+    return null;
+  }
 }
 
 // ccclub rank fetcher — split cache: data persists, retry throttled
@@ -121,7 +172,6 @@ function getClaudeUsage(): { fiveHour: number; sevenDay: number; fiveHourResetsA
   const cacheFile = "/tmp/sl-claude-usage";
   const hitFile = "/tmp/sl-claude-usage-hit";
   const now = Date.now();
-  // Cache format: { data, lastAttempt, tokenPrefix (first 20 chars of token) }
   let staleData: { fiveHour: number; sevenDay: number; fiveHourResetsAt?: number } | null = null;
   let lastAttempt = 0;
   let cachedTokenPrefix = "";
@@ -153,10 +203,8 @@ function getClaudeUsage(): { fiveHour: number; sevenDay: number; fiveHourResetsA
   const currentTokenPrefix = accessToken.slice(-20);
   const tokenChanged = cachedTokenPrefix && currentTokenPrefix !== cachedTokenPrefix;
 
-  // Throttle: skip API call unless token rotated or TTL expired
   if (!tokenChanged && lastAttempt && now - lastAttempt < API_RETRY_TTL_MS) return staleData;
 
-  // Mark attempt and store token prefix
   try { writeFileSync(cacheFile, JSON.stringify({ data: staleData, lastAttempt: now, tokenPrefix: currentTokenPrefix }), "utf-8"); } catch {}
 
   try {
@@ -165,7 +213,6 @@ function getClaudeUsage(): { fiveHour: number; sevenDay: number; fiveHourResetsA
     const response = execSync(curlCmd, { encoding: "utf-8", timeout: 5000 });
     if (!response) return staleData;
     const data = JSON.parse(response);
-    // Debug: save raw API response for diagnosis
     try { writeFileSync("/tmp/sl-claude-usage-raw", JSON.stringify(data, null, 2), "utf-8"); } catch {}
     const parseUtil = (val: any): number => {
       if (typeof val === "number") return Math.round(val);
@@ -176,15 +223,12 @@ function getClaudeUsage(): { fiveHour: number; sevenDay: number; fiveHourResetsA
     const sevenDay = parseUtil(data.seven_day?.utilization);
 
     let fiveHourResetsAt: number | undefined;
-
-    // Strategy 1: Use reset time from API if available
     const resetsAtRaw = data.five_hour?.resets_at ?? data.five_hour?.reset_at ?? data.five_hour?.next_reset;
     if (resetsAtRaw) {
       const ts = typeof resetsAtRaw === "string" ? new Date(resetsAtRaw).getTime() : resetsAtRaw * 1000;
       if (!isNaN(ts) && ts > now) fiveHourResetsAt = ts;
     }
 
-    // Strategy 2: Fallback - track when we first saw 100%
     if (fiveHour >= 100) {
       if (!fiveHourResetsAt) {
         if (existsSync(hitFile)) {
@@ -198,7 +242,6 @@ function getClaudeUsage(): { fiveHour: number; sevenDay: number; fiveHourResetsA
         }
       }
     } else {
-      // Usage dropped below 100%, clear hit tracker
       try { if (existsSync(hitFile)) unlinkSync(hitFile); } catch {}
     }
 
@@ -221,7 +264,7 @@ export function render(input: string): string {
 
   // Session data from Claude Code stdin
   const cost = data.cost?.total_cost_usd ?? 0;
-  const model = (data.model?.display_name ?? "—").replace(/\s*\((\d+[KMB])\s+context\)/i, " ($1)");
+  const modelName = (data.model?.display_name ?? "—").replace(/\s*\((\d+[KMB])\s+context\)/i, " ($1)");
   const contextPct = Math.floor(data.context_window?.used_percentage ?? 0);
 
   const transcriptPath = data.transcript_path ?? "";
@@ -249,7 +292,6 @@ export function render(input: string): string {
   if (shouldRefreshLocalCostCache(cache, transcriptPath)) {
     try {
       const result = collectCosts();
-      // Don't overwrite valid cache with zeros (directory read failure)
       if (result.cost7d > 0 || result.cost30d > 0 || !cache) {
         const newCache = { cost7d: result.cost7d, cost30d: result.cost30d, updatedAt: new Date().toISOString() };
         writeCache(newCache);
@@ -259,52 +301,101 @@ export function render(input: string): string {
   }
 
   const config = readConfig();
-  const claudeUsage = getClaudeUsage();
   const g = FG_GRAY_DIM;
   const y = FG_YELLOW;
   const m = FG_MODEL;
-  const gr = FG_GRAY;
   const r = RESET;
-  const cx = ctxColor(contextPct);
+  const cx = pctColor(contextPct);
 
-  const segments: string[] = [];
+  // Line 1: [Model] │ Project │ Git
+  const line1Parts: string[] = [];
 
-  // tokens $cost · ctx% Model
-  segments.push(`${formatTokens(totalTokens)} ${y}${formatCost(cost)}${r} ${g}·${r} ${cx}${contextPct}%${r} ${m}${model}${r}`);
+  // Model badge
+  line1Parts.push(`${FG_CYAN}[${modelName}]${r}`);
 
-  // 5h:100% · 7d:26% · 30d:$960
-  const usageParts: string[] = [];
-  if (claudeUsage) {
-    if (claudeUsage.fiveHour >= 100 && claudeUsage.fiveHourResetsAt) {
-      const countdown = formatCountdown(claudeUsage.fiveHourResetsAt);
-      usageParts.push(`${FG_RED}5h:${countdown}${r}`);
-    } else {
-      const c5 = ctxColor(claudeUsage.fiveHour);
-      usageParts.push(`${c5}5h:${claudeUsage.fiveHour}%${r}`);
-    }
-    const c7 = ctxColor(claudeUsage.sevenDay);
-    usageParts.push(`${c7}7d:${claudeUsage.sevenDay}%${r}`);
+  // Project path (last directory only)
+  const projectPath = process.cwd().split("/").pop() || ".";
+  line1Parts.push(`${FG_YELLOW}${projectPath}${r}`);
+
+  // Git status
+  const git = getGitStatus();
+  if (git) {
+    const dirty = git.dirty ? `${FG_RED}*${r}` : "";
+    line1Parts.push(`${g}git:(${FG_CYAN}${git.branch}${r}${dirty})`);
   }
+
+  // Line 2: Context ███░░ 45% │ Balance │ Cost
+  const line2Parts: string[] = [];
+
+  // Context progress bar
+  const bar = formatBar(contextPct);
+  line2Parts.push(`${DIM}Context${r} ${cx}${bar}${r} ${cx}${contextPct}%${r}`);
+
+  // GLM Coding Plan usage (if using Zhipu proxy)
+  if (isZhipuMode()) {
+    const glmUsage = getGlmCodingPlanUsage();
+    if (glmUsage) {
+      // 5-hour rolling usage with progress bar
+      const fiveBar = formatBar(glmUsage.fiveHourPercent, 8);
+      const fiveColor = pctColor(glmUsage.fiveHourPercent);
+      line2Parts.push(`${fiveColor}5h:${fiveBar} ${glmUsage.fiveHourPercent}%${r}`);
+
+      // Weekly usage with progress bar
+      const weeklyBar = formatBar(glmUsage.weeklyPercent, 8);
+      const weeklyColor = pctColor(glmUsage.weeklyPercent);
+      line2Parts.push(`${weeklyColor}7d:${weeklyBar} ${glmUsage.weeklyPercent}%${r}`);
+    }
+
+    // Zhipu token packages
+    const zhipuPackages = getZhipuBalance();
+    if (zhipuPackages && zhipuPackages.length > 0) {
+      let totalBalance = 0;
+      let totalMagnitude = 0;
+      for (const pkg of zhipuPackages) {
+        totalBalance += pkg.tokenBalance;
+        totalMagnitude += pkg.tokensMagnitude;
+      }
+      const balance = formatTokens(totalBalance);
+      const total = formatTokens(totalMagnitude);
+      line2Parts.push(`${FG_CYAN}Tokens${r} ${balance}/${total}`);
+    }
+  } else {
+    // Claude usage (only if not using Zhipu)
+    const claudeUsage = getClaudeUsage();
+    if (claudeUsage) {
+      if (claudeUsage.fiveHour >= 100 && claudeUsage.fiveHourResetsAt) {
+        const countdown = formatCountdown(claudeUsage.fiveHourResetsAt);
+        line2Parts.push(`${FG_RED}5h:${countdown}${r}`);
+      } else {
+        const c5 = pctColor(claudeUsage.fiveHour);
+        line2Parts.push(`${c5}5h:${claudeUsage.fiveHour}%${r}`);
+      }
+      const c7 = pctColor(claudeUsage.sevenDay);
+      line2Parts.push(`${c7}7d:${claudeUsage.sevenDay}%${r}`);
+    }
+  }
+
+  // Period cost
   if (cache) {
     const period = config.period || "30d";
     if (period === "both") {
-      usageParts.push(`${y}7d:${formatCost(cache.cost7d)}${r}`);
-      usageParts.push(`${y}30d:${formatCost(cache.cost30d)}${r}`);
+      line2Parts.push(`${y}7d:${formatCost(cache.cost7d)}${r}`);
+      line2Parts.push(`${y}30d:${formatCost(cache.cost30d)}${r}`);
     } else {
       const periodCost = period === "7d" ? cache.cost7d : cache.cost30d;
-      usageParts.push(`${y}${period}:${formatCost(periodCost)}${r}`);
+      line2Parts.push(`${y}${period}:${formatCost(periodCost)}${r}`);
     }
   }
-  if (usageParts.length > 0) {
-    segments.push(usageParts.join(` ${g}·${r} `));
-  }
 
-  // #2 $53.6
+  // ccclub rank (append to line 2)
   const ccclubRank = getCcclubRank();
   if (ccclubRank) {
     const rc = rankColor(ccclubRank.rank);
-    segments.push(`${rc}#${ccclubRank.rank} ${formatCost(ccclubRank.cost)}${r}`);
+    line2Parts.push(`${rc}#${ccclubRank.rank} ${formatCost(ccclubRank.cost)}${r}`);
   }
 
-  return " " + segments.join(` ${gr}/${r} `);
+  const line1 = " " + line1Parts.join(SEPARATOR);
+  const line2 = " " + line2Parts.join(SEPARATOR);
+
+  return line1 + "\n" + line2;
 }

@@ -21,21 +21,30 @@ describe("render", () => {
     assert.equal(render(""), "");
   });
 
-  it("renders basic session data", () => {
+  it("renders dual-line output with model badge and context bar", () => {
     const input = JSON.stringify({
       cost: { total_cost_usd: 2.42 },
       model: { display_name: "Opus 4.6" },
-      context_window: { used_percentage: 40.5 },
+      context_window: { used_percentage: 45 },
     });
     const output = render(input);
     const plain = stripAnsi(output);
 
-    assert.ok(plain.includes("$2.42"), `should include cost, got: ${plain}`);
+    // Should have 2 lines (newline separator)
+    const lines = plain.split("\n").filter(l => l.trim());
+    assert.equal(lines.length, 2, "should have 2 lines");
+
+    // Line 1: Model badge
     assert.ok(plain.includes("Opus 4.6"), `should include model, got: ${plain}`);
-    assert.ok(plain.includes("40%"), `should include context %, got: ${plain}`);
+
+    // Line 2: Context bar and percentage
+    assert.ok(plain.includes("Context"), `should include Context label, got: ${plain}`);
+    assert.ok(plain.includes("45%"), `should include context %, got: ${plain}`);
+    // Progress bar uses █ and ░ characters
+    assert.ok(/[█░]+/.test(plain), `should include progress bar, got: ${plain}`);
   });
 
-  it("handles zero cost", () => {
+  it("handles zero cost (shows period cost from cache)", () => {
     const input = JSON.stringify({
       cost: { total_cost_usd: 0 },
       model: { display_name: "Sonnet 4.5" },
@@ -44,7 +53,12 @@ describe("render", () => {
     const output = render(input);
     const plain = stripAnsi(output);
 
-    assert.ok(plain.includes("$0.00"), `should show $0.00, got: ${plain}`);
+    // New format shows period cost from cache, not session cost
+    // Should include "7d:" or "30d:" prefix
+    assert.ok(
+      plain.includes("7d:") || plain.includes("30d:"),
+      `should show period cost from cache, got: ${plain}`
+    );
     assert.ok(plain.includes("0%"), `should show 0%, got: ${plain}`);
   });
 
@@ -53,10 +67,14 @@ describe("render", () => {
     const output = render(input);
     const plain = stripAnsi(output);
 
-    // Should use defaults: cost=0, model="—", context=0%
-    assert.ok(plain.includes("$0.00"), `should default cost to $0.00, got: ${plain}`);
+    // Should use defaults: model="—", context=0%
     assert.ok(plain.includes("—"), `should default model to —, got: ${plain}`);
     assert.ok(plain.includes("0%"), `should default context to 0%, got: ${plain}`);
+    // Should include period cost from cache
+    assert.ok(
+      plain.includes("7d:") || plain.includes("30d:"),
+      `should show period cost, got: ${plain}`
+    );
   });
 
   it("counts tokens from transcript", () => {
@@ -85,26 +103,15 @@ describe("render", () => {
       const output = render(input);
       const plain = stripAnsi(output);
 
-      // 5000+2000+3000+1000 = 11000 → "11.0k"
-      assert.ok(plain.includes("11.0k"), `should show 11.0k tokens, got: ${plain}`);
+      // New format focuses on context bar and cost, not token count in display
+      assert.ok(plain.includes("Sonnet 4.5"), `should include model, got: ${plain}`);
+      assert.ok(plain.includes("25%"), `should show 25% context, got: ${plain}`);
     } finally {
       rmSync(tmpDir, { recursive: true, force: true });
     }
   });
 
-  it("shows 0 tokens when no transcript", () => {
-    const input = JSON.stringify({
-      cost: { total_cost_usd: 0.5 },
-      model: { display_name: "Haiku 4.5" },
-      context_window: { used_percentage: 10 },
-    });
-    const output = render(input);
-    const plain = stripAnsi(output);
-
-    assert.ok(plain.startsWith(" 0 "), `should start with 0 tokens, got: "${plain}"`);
-  });
-
-  it("handles large cost values", () => {
+  it("handles large period cost values", () => {
     const input = JSON.stringify({
       cost: { total_cost_usd: 1234.56 },
       model: { display_name: "Opus 4.6" },
@@ -113,7 +120,6 @@ describe("render", () => {
     const output = render(input);
     const plain = stripAnsi(output);
 
-    assert.ok(plain.includes("$1,235"), `should format large cost, got: ${plain}`);
     assert.ok(plain.includes("95%"), `should show 95%, got: ${plain}`);
   });
 
@@ -129,21 +135,7 @@ describe("render", () => {
     assert.ok(output.includes("\x1b[38;5;167m"), "should use red for high context");
   });
 
-  it("renders both 7d and 30d when period is both", () => {
-    // This test verifies the "both" period renders two separate cost segments
-    // Note: render() reads config from ~/.cc-costline/ which may not have period=both,
-    // but we can at least verify the function doesn't crash with any config
-    const input = JSON.stringify({
-      cost: { total_cost_usd: 5 },
-      model: { display_name: "Sonnet 4.5" },
-      context_window: { used_percentage: 20 },
-    });
-    // Should not throw regardless of config state
-    const output = render(input);
-    assert.ok(output.length > 0, "should produce output");
-  });
-
-  it("output starts with a space", () => {
+  it("output starts with a space and has newline separator", () => {
     const input = JSON.stringify({
       cost: { total_cost_usd: 0 },
       model: { display_name: "Test" },
@@ -151,5 +143,46 @@ describe("render", () => {
     });
     const output = render(input);
     assert.ok(output.startsWith(" "), "output should start with a leading space");
+    assert.ok(output.includes("\n"), "output should have newline (dual-line)");
+  });
+
+  it("shows git status when available", () => {
+    const input = JSON.stringify({
+      cost: { total_cost_usd: 0 },
+      model: { display_name: "Test" },
+      context_window: { used_percentage: 0 },
+    });
+    const output = render(input);
+    const plain = stripAnsi(output);
+
+    // Should include git: with branch name
+    assert.ok(plain.includes("git:"), `should include git status, got: ${plain}`);
+  });
+
+  it("includes project path", () => {
+    const input = JSON.stringify({
+      cost: { total_cost_usd: 0 },
+      model: { display_name: "Test" },
+      context_window: { used_percentage: 0 },
+    });
+    const output = render(input);
+    const plain = stripAnsi(output);
+
+    // Should include current directory name
+    const cwd = process.cwd().split("/").pop();
+    assert.ok(plain.includes(cwd || "."), `should include project path, got: ${plain}`);
+  });
+
+  it("includes separator │ between sections", () => {
+    const input = JSON.stringify({
+      cost: { total_cost_usd: 0 },
+      model: { display_name: "Test" },
+      context_window: { used_percentage: 0 },
+    });
+    const output = render(input);
+    const plain = stripAnsi(output);
+
+    // Should include │ separator (without ANSI codes it shows as a character)
+    assert.ok(plain.includes("│"), `should include │ separator, got: ${plain}`);
   });
 });

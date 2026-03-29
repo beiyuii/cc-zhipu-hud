@@ -12,8 +12,8 @@ import { writeCache, writeConfig, readConfig, CACHE_DIR } from "./cache.js";
 import { render } from "./statusline.js";
 
 const SETTINGS_PATH = join(homedir(), ".claude", "settings.json");
-const RENDER_COMMAND = "cc-costline render";
-const REFRESH_COMMAND = "cc-costline refresh";
+const RENDER_COMMAND = "cc-zhipu-hud render";
+const REFRESH_COMMAND = "cc-zhipu-hud refresh";
 
 // ─── Helpers ──────────────────────────────────────────────
 
@@ -58,10 +58,10 @@ function cmdInstall(): void {
   for (const event of ["SessionEnd", "Stop"] as const) {
     if (!settings.hooks[event]) settings.hooks[event] = [];
 
-    // Remove any old cc-costline / cc-statusline hooks first
+    // Remove any old cc-zhipu-hud hooks first
     settings.hooks[event] = settings.hooks[event].filter(
       (h: any) => !h.hooks?.some((hh: any) =>
-        hh.command?.includes("cc-costline") || hh.command?.includes("cc-statusline")
+        hh.command?.includes("cc-zhipu-hud") || hh.command?.includes("cc-costline") || hh.command?.includes("cc-statusline")
       )
     );
 
@@ -99,7 +99,8 @@ function cmdUninstall(): void {
   const settings = readSettings();
 
   // Remove statusLine if it's ours
-  if (settings.statusLine?.command?.includes("cc-costline") ||
+  if (settings.statusLine?.command?.includes("cc-zhipu-hud") ||
+      settings.statusLine?.command?.includes("cc-costline") ||
       settings.statusLine?.command?.includes("cc-statusline")) {
     delete settings.statusLine;
   }
@@ -109,7 +110,7 @@ function cmdUninstall(): void {
     if (!settings.hooks?.[event]) continue;
     settings.hooks[event] = settings.hooks[event].filter(
       (h: any) => !h.hooks?.some((hh: any) =>
-        hh.command?.includes("cc-costline") || hh.command?.includes("cc-statusline")
+        hh.command?.includes("cc-zhipu-hud") || hh.command?.includes("cc-costline") || hh.command?.includes("cc-statusline")
       )
     );
     if (settings.hooks[event].length === 0) {
@@ -118,7 +119,7 @@ function cmdUninstall(): void {
   }
 
   saveSettings(settings);
-  console.log("✓ Removed cc-costline from settings.json");
+  console.log("✓ Removed cc-zhipu-hud from settings.json");
   console.log("  Cache directory preserved at: " + CACHE_DIR);
 }
 
@@ -127,7 +128,7 @@ function cmdConfig(args: string[]): void {
   if (periodIdx === -1 || !args[periodIdx + 1]) {
     const config = readConfig();
     console.log("Current config:", JSON.stringify(config, null, 2));
-    console.log("\nUsage: cc-costline config --period <7d|30d|both>");
+    console.log("\nUsage: cc-zhipu-hud config --period <7d|30d|both>");
     return;
   }
 
@@ -182,20 +183,20 @@ switch (command) {
     cmdRender();
     break;
   default:
-    console.log(`cc-costline v${pkg.version} — Enhanced statusline for Claude Code
+    console.log(`cc-zhipu-hud v${pkg.version} — Enhanced statusline for Claude Code with Zhipu AI/GLM balance tracking
 
 Commands:
-  install     Configure Claude Code to use cc-costline
-  uninstall   Remove cc-costline from Claude Code settings
+  install     Configure Claude Code to use cc-zhipu-hud
+  uninstall   Remove cc-zhipu-hud from Claude Code settings
   config      View/update display settings
   refresh     Manually recalculate cost cache
   render      Output statusline (reads stdin from Claude Code)
 
 Examples:
-  cc-costline install
-  cc-costline config --period 7d
-  cc-costline config --period 30d
-  cc-costline config --period both
-  cc-costline refresh`);
+  cc-zhipu-hud install
+  cc-zhipu-hud config --period 7d
+  cc-zhipu-hud config --period 30d
+  cc-zhipu-hud config --period both
+  cc-zhipu-hud refresh`);
     break;
 }

@@ -6,7 +6,9 @@ import { tmpdir } from "node:os";
 import {
   formatTokens,
   formatCost,
+  formatBar,
   ctxColor,
+  pctColor,
   formatCountdown,
   rankColor,
   shouldRefreshLocalCostCache,
@@ -49,6 +51,49 @@ describe("formatCost", () => {
     assert.equal(formatCost(0), "$0.00");
     assert.equal(formatCost(2.42), "$2.42");
     assert.equal(formatCost(9.99), "$9.99");
+  });
+});
+
+describe("formatBar", () => {
+  it("creates progress bars with correct fill", () => {
+    assert.equal(formatBar(0), "░░░░░░░░░░");
+    assert.equal(formatBar(50), "█████░░░░░");
+    assert.equal(formatBar(100), "██████████");
+  });
+
+  it("handles edge cases", () => {
+    assert.equal(formatBar(-10), "░░░░░░░░░░"); // clamped to 0
+    assert.equal(formatBar(150), "██████████"); // clamped to 100
+  });
+
+  it("rounds correctly", () => {
+    assert.equal(formatBar(45), "█████░░░░░"); // 4.5 -> 5 filled
+    assert.equal(formatBar(44), "████░░░░░░"); // 4.4 -> 4 filled (rounds to 4)
+    assert.equal(formatBar(41), "████░░░░░░"); // 4.1 -> 4 filled
+    assert.equal(formatBar(5), "█░░░░░░░░░"); // 0.5 -> 1 filled
+    assert.equal(formatBar(4), "░░░░░░░░░░"); // 0.4 -> 0 filled
+  });
+
+  it("supports custom width", () => {
+    assert.equal(formatBar(50, 5), "███░░");
+    assert.equal(formatBar(100, 20), "████████████████████");
+  });
+});
+
+describe("pctColor", () => {
+  it("returns red for >= 80%", () => {
+    assert.equal(pctColor(80), "\x1b[38;5;167m");
+    assert.equal(pctColor(100), "\x1b[38;5;167m");
+  });
+
+  it("returns orange for 60-79%", () => {
+    assert.equal(pctColor(60), "\x1b[38;5;208m");
+    assert.equal(pctColor(79), "\x1b[38;5;208m");
+  });
+
+  it("returns green for < 60%", () => {
+    assert.equal(pctColor(0), "\x1b[38;5;29m");
+    assert.equal(pctColor(59), "\x1b[38;5;29m");
   });
 });
 
@@ -115,12 +160,12 @@ describe("shouldRefreshLocalCostCache", () => {
   });
 
   it("refreshes immediately when transcript is newer than cache", () => {
-    const tmpDir = mkdtempSync(join(tmpdir(), "cc-costline-statusline-"));
+    const tmpDir = mkdtempSync(join(tmpdir(), "cc-zhipu-hud-statusline-"));
     try {
       const transcriptPath = join(tmpDir, "session.jsonl");
       writeFileSync(transcriptPath, "{}\n");
 
-      const now = new Date("2026-03-17T10:00:00.000Z");
+      const now = new Date("2026-03-29T10:00:00.000Z");
       utimesSync(transcriptPath, now, now);
 
       const cache = {
@@ -136,12 +181,12 @@ describe("shouldRefreshLocalCostCache", () => {
   });
 
   it("keeps fresh cache when transcript has not changed", () => {
-    const tmpDir = mkdtempSync(join(tmpdir(), "cc-costline-statusline-"));
+    const tmpDir = mkdtempSync(join(tmpdir(), "cc-zhipu-hud-statusline-"));
     try {
       const transcriptPath = join(tmpDir, "session.jsonl");
       writeFileSync(transcriptPath, "{}\n");
 
-      const now = new Date("2026-03-17T10:00:00.000Z");
+      const now = new Date("2026-03-29T10:00:00.000Z");
       const transcriptTime = new Date(now.getTime() - 10_000);
       utimesSync(transcriptPath, transcriptTime, transcriptTime);
 
