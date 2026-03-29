@@ -1,10 +1,10 @@
 {
-  "name": "cc-costline",
-  "version": "0.4.2",
-  "description": "Enhanced statusline for Claude Code with cost tracking, usage limits, and leaderboard",
+  "name": "cc-zhipu-hud",
+  "version": "0.1.0",
+  "description": "Enhanced statusline for Claude Code with Zhipu AI/GLM balance tracking",
   "type": "module",
   "bin": {
-    "cc-costline": "dist/cli.js"
+    "cc-zhipu-hud": "dist/cli.js"
   },
   "scripts": {
     "build": "tsc",
@@ -20,11 +20,14 @@
   "keywords": [
     "claude-code",
     "statusline",
+    "zhipu",
+    "glm",
     "cost-tracking"
   ],
-  "author": "ventuss",
+  "author": "beiyuii",
   "license": "MIT",
   "devDependencies": {
+    "@types/node": "^25.5.0",
     "typescript": "^5.9.3"
   }
 }

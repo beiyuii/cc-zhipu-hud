@@ -8,10 +8,10 @@ import { collectCosts } from "./collector.js";
 
 // TTL for local cost cache (2 minutes)
 const CACHE_TTL_MS = 120_000;
-// TTL for external API retry throttle (5 minutes) — usage API has strict per-token rate limits (~5 req/token)
+// TTL for external API retry throttle (5 minutes)
 const API_RETRY_TTL_MS = 300_000;
 
-// ANSI colors (matching original statusline.sh)
+// ANSI colors
 const FG_GRAY      = "\x1b[38;5;245m";
 const FG_GRAY_DIM  = "\x1b[38;5;102m";
 const FG_YELLOW    = "\x1b[38;2;229;192;123m";
@@ -21,6 +21,7 @@ const FG_RED       = "\x1b[38;5;167m";
 const FG_MODEL     = "\x1b[38;2;202;124;94m";
 const FG_CYAN      = "\x1b[38;5;109m";
 const FG_WHITE     = "\x1b[38;5;255m";
+const FG_PURPLE    = "\x1b[38;5;141m";
 const RESET        = "\x1b[0m";
 
 export function formatTokens(t: number): string {
@@ -71,7 +72,7 @@ export function shouldRefreshLocalCostCache(
   return now - cacheUpdatedAt >= CACHE_TTL_MS;
 }
 
-// ccclub rank fetcher — split cache: data persists, retry throttled
+// ccclub rank fetcher
 function getCcclubRank(): { rank: number; total: number; cost: number } | null {
   const configPath = join(homedir(), ".ccclub", "config.json");
   if (!existsSync(configPath)) return null;
@@ -116,12 +117,11 @@ export function rankColor(rank: number): string {
   return FG_CYAN;
 }
 
-// Claude usage fetcher — token-aware cache: detects token rotation to retry immediately
+// Claude usage fetcher (for official API)
 function getClaudeUsage(): { fiveHour: number; sevenDay: number; fiveHourResetsAt?: number } | null {
   const cacheFile = "/tmp/sl-claude-usage";
   const hitFile = "/tmp/sl-claude-usage-hit";
   const now = Date.now();
-  // Cache format: { data, lastAttempt, tokenPrefix (first 20 chars of token) }
   let staleData: { fiveHour: number; sevenDay: number; fiveHourResetsAt?: number } | null = null;
   let lastAttempt = 0;
   let cachedTokenPrefix = "";
@@ -134,7 +134,6 @@ function getClaudeUsage(): { fiveHour: number; sevenDay: number; fiveHourResetsA
     } catch { }
   }
 
-  // Get current token
   let accessToken = "";
   try {
     const username = process.env.USER || process.env.USERNAME;
@@ -153,10 +152,8 @@ function getClaudeUsage(): { fiveHour: number; sevenDay: number; fiveHourResetsA
   const currentTokenPrefix = accessToken.slice(-20);
   const tokenChanged = cachedTokenPrefix && currentTokenPrefix !== cachedTokenPrefix;
 
-  // Throttle: skip API call unless token rotated or TTL expired
   if (!tokenChanged && lastAttempt && now - lastAttempt < API_RETRY_TTL_MS) return staleData;
 
-  // Mark attempt and store token prefix
   try { writeFileSync(cacheFile, JSON.stringify({ data: staleData, lastAttempt: now, tokenPrefix: currentTokenPrefix }), "utf-8"); } catch {}
 
   try {
@@ -165,7 +162,6 @@ function getClaudeUsage(): { fiveHour: number; sevenDay: number; fiveHourResetsA
     const response = execSync(curlCmd, { encoding: "utf-8", timeout: 5000 });
     if (!response) return staleData;
     const data = JSON.parse(response);
-    // Debug: save raw API response for diagnosis
     try { writeFileSync("/tmp/sl-claude-usage-raw", JSON.stringify(data, null, 2), "utf-8"); } catch {}
     const parseUtil = (val: any): number => {
       if (typeof val === "number") return Math.round(val);
@@ -176,15 +172,12 @@ function getClaudeUsage(): { fiveHour: number; sevenDay: number; fiveHourResetsA
     const sevenDay = parseUtil(data.seven_day?.utilization);
 
     let fiveHourResetsAt: number | undefined;
-
-    // Strategy 1: Use reset time from API if available
     const resetsAtRaw = data.five_hour?.resets_at ?? data.five_hour?.reset_at ?? data.five_hour?.next_reset;
     if (resetsAtRaw) {
       const ts = typeof resetsAtRaw === "string" ? new Date(resetsAtRaw).getTime() : resetsAtRaw * 1000;
       if (!isNaN(ts) && ts > now) fiveHourResetsAt = ts;
     }
 
-    // Strategy 2: Fallback - track when we first saw 100%
     if (fiveHour >= 100) {
       if (!fiveHourResetsAt) {
         if (existsSync(hitFile)) {
@@ -198,7 +191,6 @@ function getClaudeUsage(): { fiveHour: number; sevenDay: number; fiveHourResetsA
         }
       }
     } else {
-      // Usage dropped below 100%, clear hit tracker
       try { if (existsSync(hitFile)) unlinkSync(hitFile); } catch {}
     }
 
@@ -209,6 +201,214 @@ function getClaudeUsage(): { fiveHour: number; sevenDay: number; fiveHourResetsA
   } catch {
     return staleData;
   }
+}
+
+// ─── Zhipu AI Balance Fetcher ──────────────────────────────────────────────
+
+interface ZhipuBalance {
+  totalBalance: number;      // 总余额（元）
+  cashBalance: number;       // 现金余额
+  resourceBalance: number;   // 资源包余额
+  resourcePackages: Array<{
+    name: string;
+    balance: number;
+    unit: string;
+  }>;
+}
+
+/**
+ * 从 settings.json 获取 API Key
+ */
+function getZhipuApiKey(): string | null {
+  try {
+    const settingsPath = join(homedir(), ".claude", "settings.json");
+    if (!existsSync(settingsPath)) return null;
+    const settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
+    // ANTHROPIC_AUTH_TOKEN 环境变量或直接配置
+    const envToken = settings.env?.ANTHROPIC_AUTH_TOKEN;
+    if (envToken) return envToken;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 检测是否使用智谱 AI 代理
+ */
+function isZhipuProxy(): boolean {
+  try {
+    const settingsPath = join(homedir(), ".claude", "settings.json");
+    if (!existsSync(settingsPath)) return false;
+    const settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
+    const baseUrl = settings.env?.ANTHROPIC_BASE_URL || "";
+    return baseUrl.includes("bigmodel.cn") || baseUrl.includes("zhipu");
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 获取智谱 AI 账户余额
+ */
+function getZhipuBalance(): ZhipuBalance | null {
+  const cacheFile = "/tmp/sl-zhipu-balance";
+  const now = Date.now();
+  let staleData: ZhipuBalance | null = null;
+  let lastAttempt = 0;
+
+  // Read cache
+  if (existsSync(cacheFile)) {
+    try {
+      const cached = JSON.parse(readFileSync(cacheFile, "utf-8"));
+      staleData = cached.data ?? null;
+      lastAttempt = cached.lastAttempt || 0;
+      // Use shorter TTL for balance (1 min) since it changes more frequently
+      if (now - lastAttempt < 60_000) return staleData;
+    } catch { }
+  }
+
+  const apiKey = getZhipuApiKey();
+  if (!apiKey) return staleData;
+
+  // Mark attempt
+  try { writeFileSync(cacheFile, JSON.stringify({ data: staleData, lastAttempt: now }), "utf-8"); } catch {}
+
+  try {
+    // Zhipu balance API endpoint
+    const apiUrl = "https://open.bigmodel.cn/api/paas/v4/billing/quota";
+    const curlCmd = `curl -sf "${apiUrl}" -H "Authorization: Bearer ${apiKey}" -H "Content-Type: application/json"`;
+    const response = execSync(curlCmd, { encoding: "utf-8", timeout: 5000 });
+
+    if (!response) return staleData;
+
+    const data = JSON.parse(response);
+
+    // Parse the response - Zhipu returns balance in various formats
+    // Try to extract meaningful balance information
+    let totalBalance = 0;
+    let cashBalance = 0;
+    let resourceBalance = 0;
+    const resourcePackages: ZhipuBalance["resourcePackages"] = [];
+
+    // Handle different response formats
+    if (data.data) {
+      // New API format
+      const quotaData = data.data;
+      if (Array.isArray(quotaData)) {
+        for (const item of quotaData) {
+          if (item.type === "CASH") {
+            cashBalance = item.balance || 0;
+          } else if (item.resourcePackageType) {
+            resourcePackages.push({
+              name: item.resourcePackageType || item.name || "Resource",
+              balance: item.balance || 0,
+              unit: item.unit || "tokens",
+            });
+            resourceBalance += (item.balance || 0);
+          }
+        }
+      } else if (quotaData.cashBalance !== undefined) {
+        cashBalance = quotaData.cashBalance || 0;
+        resourceBalance = quotaData.resourceBalance || 0;
+      }
+    } else if (data.balance !== undefined) {
+      // Simple format
+      totalBalance = data.balance || 0;
+    }
+
+    totalBalance = totalBalance || cashBalance + resourceBalance;
+
+    const result: ZhipuBalance = {
+      totalBalance,
+      cashBalance,
+      resourceBalance,
+      resourcePackages,
+    };
+
+    // Debug: save raw response
+    try { writeFileSync("/tmp/sl-zhipu-balance-raw", JSON.stringify(data, null, 2), "utf-8"); } catch {}
+
+    writeFileSync(cacheFile, JSON.stringify({ data: result, lastAttempt: now }), "utf-8");
+    return result;
+  } catch (error) {
+    // Try alternative endpoint
+    try {
+      const altApiUrl = "https://www.bigmodel.cn/api/biz/account/query-customer-account-report";
+      const curlCmd = `curl -sf "${altApiUrl}" -H "Authorization: Bearer ${apiKey}" -H "Content-Type: application/json"`;
+      const response = execSync(curlCmd, { encoding: "utf-8", timeout: 5000 });
+
+      if (!response) return staleData;
+
+      const data = JSON.parse(response);
+      try { writeFileSync("/tmp/sl-zhipu-balance-raw", JSON.stringify(data, null, 2), "utf-8"); } catch {}
+
+      // Parse alternative format
+      let totalBalance = 0;
+      let cashBalance = 0;
+      let resourceBalance = 0;
+
+      if (data.data) {
+        const accountData = data.data;
+        cashBalance = accountData.cashBalance || accountData.cash_balance || 0;
+        resourceBalance = accountData.resourceBalance || accountData.resource_balance || 0;
+        totalBalance = cashBalance + resourceBalance;
+      } else if (data.balance !== undefined) {
+        totalBalance = data.balance;
+      }
+
+      const result: ZhipuBalance = {
+        totalBalance,
+        cashBalance,
+        resourceBalance,
+        resourcePackages: [],
+      };
+
+      writeFileSync(cacheFile, JSON.stringify({ data: result, lastAttempt: now }), "utf-8");
+      return result;
+    } catch {
+      return staleData;
+    }
+  }
+}
+
+/**
+ * 格式化智谱余额显示
+ */
+function formatZhipuBalance(balance: ZhipuBalance | null): string {
+  if (!balance) return "";
+
+  const parts: string[] = [];
+
+  // 显示现金余额（转换为元）
+  if (balance.cashBalance > 0) {
+    const yuan = balance.cashBalance / 10000; // 假设单位是万分之一元
+    if (yuan >= 1) {
+      parts.push(`${FG_YELLOW}¥${yuan.toFixed(1)}${RESET}`);
+    } else {
+      parts.push(`${FG_YELLOW}¥${yuan.toFixed(2)}${RESET}`);
+    }
+  }
+
+  // 显示资源包
+  if (balance.resourcePackages.length > 0) {
+    const pkg = balance.resourcePackages[0];
+    const formattedBalance = pkg.balance >= 1000000
+      ? (pkg.balance / 1000000).toFixed(1) + "M"
+      : pkg.balance >= 1000
+        ? (pkg.balance / 1000).toFixed(1) + "k"
+        : String(pkg.balance);
+    parts.push(`${FG_PURPLE}${formattedBalance} tokens${RESET}`);
+  } else if (balance.resourceBalance > 0) {
+    const formatted = balance.resourceBalance >= 1000000
+      ? (balance.resourceBalance / 1000000).toFixed(1) + "M"
+      : balance.resourceBalance >= 1000
+        ? (balance.resourceBalance / 1000).toFixed(1) + "k"
+        : String(balance.resourceBalance);
+    parts.push(`${FG_PURPLE}${formatted} res${RESET}`);
+  }
+
+  return parts.join(` ${FG_GRAY_DIM}·${RESET} `);
 }
 
 export function render(input: string): string {
@@ -249,7 +449,6 @@ export function render(input: string): string {
   if (shouldRefreshLocalCostCache(cache, transcriptPath)) {
     try {
       const result = collectCosts();
-      // Don't overwrite valid cache with zeros (directory read failure)
       if (result.cost7d > 0 || result.cost30d > 0 || !cache) {
         const newCache = { cost7d: result.cost7d, cost30d: result.cost30d, updatedAt: new Date().toISOString() };
         writeCache(newCache);
@@ -259,7 +458,6 @@ export function render(input: string): string {
   }
 
   const config = readConfig();
-  const claudeUsage = getClaudeUsage();
   const g = FG_GRAY_DIM;
   const y = FG_YELLOW;
   const m = FG_MODEL;
@@ -272,19 +470,36 @@ export function render(input: string): string {
   // tokens $cost · ctx% Model
   segments.push(`${formatTokens(totalTokens)} ${y}${formatCost(cost)}${r} ${g}·${r} ${cx}${contextPct}%${r} ${m}${model}${r}`);
 
-  // 5h:100% · 7d:26% · 30d:$960
+  // Check if using Zhipu proxy
+  const usingZhipu = isZhipuProxy();
+
+  // Usage/Balance section
   const usageParts: string[] = [];
-  if (claudeUsage) {
-    if (claudeUsage.fiveHour >= 100 && claudeUsage.fiveHourResetsAt) {
-      const countdown = formatCountdown(claudeUsage.fiveHourResetsAt);
-      usageParts.push(`${FG_RED}5h:${countdown}${r}`);
-    } else {
-      const c5 = ctxColor(claudeUsage.fiveHour);
-      usageParts.push(`${c5}5h:${claudeUsage.fiveHour}%${r}`);
+
+  if (usingZhipu) {
+    // Show Zhipu balance instead of Claude usage limits
+    const zhipuBalance = getZhipuBalance();
+    const balanceStr = formatZhipuBalance(zhipuBalance);
+    if (balanceStr) {
+      usageParts.push(`${FG_CYAN}Zhipu${RESET} ${balanceStr}`);
     }
-    const c7 = ctxColor(claudeUsage.sevenDay);
-    usageParts.push(`${c7}7d:${claudeUsage.sevenDay}%${r}`);
+  } else {
+    // Show Claude usage limits (original behavior)
+    const claudeUsage = getClaudeUsage();
+    if (claudeUsage) {
+      if (claudeUsage.fiveHour >= 100 && claudeUsage.fiveHourResetsAt) {
+        const countdown = formatCountdown(claudeUsage.fiveHourResetsAt);
+        usageParts.push(`${FG_RED}5h:${countdown}${r}`);
+      } else {
+        const c5 = ctxColor(claudeUsage.fiveHour);
+        usageParts.push(`${c5}5h:${claudeUsage.fiveHour}%${r}`);
+      }
+      const c7 = ctxColor(claudeUsage.sevenDay);
+      usageParts.push(`${c7}7d:${claudeUsage.sevenDay}%${r}`);
+    }
   }
+
+  // Period cost
   if (cache) {
     const period = config.period || "30d";
     if (period === "both") {
@@ -295,11 +510,12 @@ export function render(input: string): string {
       usageParts.push(`${y}${period}:${formatCost(periodCost)}${r}`);
     }
   }
+
   if (usageParts.length > 0) {
     segments.push(usageParts.join(` ${g}·${r} `));
   }
 
-  // #2 $53.6
+  // #2 $53.6 (ccclub rank)
   const ccclubRank = getCcclubRank();
   if (ccclubRank) {
     const rc = rankColor(ccclubRank.rank);
