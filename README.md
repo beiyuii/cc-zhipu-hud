@@ -1,5 +1,7 @@
 # cc-zhipu-hud
 
+[English](README.md) | [中文](README.zh-CN.md)
+
 Enhanced statusline for [Claude Code](https://docs.anthropic.com/en/docs/claude-code) — with **Zhipu AI/GLM balance tracking** support.
 
 Forked from [cc-costline](https://github.com/Ventuss-OvO/cc-costline) with added support for [Zhipu AI](https://bigmodel.cn/) API proxy users.
@@ -109,6 +111,18 @@ npm unlink cc-zhipu-hud
 
 - [cc-costline](https://github.com/Ventuss-OvO/cc-costline) by Ventuss — Original project
 - [ccclub](https://github.com/mazzzystar/ccclub) by 碎瓜 — Claude Code leaderboard
+
+## Roadmap
+
+- [ ] Support more GLM model pricing tiers
+- [ ] Add Windows/Linux keychain support for OAuth credentials
+- [ ] Add configurable balance/cost thresholds with alerts
+- [ ] Support custom API endpoints
+- [ ] Add more language translations
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 

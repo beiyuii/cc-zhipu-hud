@@ -1,6 +1,6 @@
-# cc-costline
+# cc-zhipu-hud
 
-Enhanced statusline for Claude Code — adds cost tracking, usage limits, and leaderboard rank.
+Enhanced statusline for Claude Code with Zhipu AI/GLM balance tracking support.
 
 ## Tech Stack
 
@@ -26,7 +26,8 @@ src/
 ├── statusline.ts   # Render logic, inline data refresh with unified TTL caching
 ├── collector.ts    # Scan ~/.claude/projects/**/*.jsonl for token usage
 ├── calculator.ts   # Per-model pricing and cost calculation
-└── cache.ts        # Read/write cost cache and config (~/.cc-costline/)
+├── cache.ts        # Read/write cost cache and config (~/.cc-zhipu-hud/)
+└── zhipu.ts        # Zhipu AI/GLM balance fetching
 test/
 ├── statusline.test.ts  # Unit tests for pure formatting/color functions
 ├── calculator.test.ts  # Unit tests for pricing lookup and cost calculation
@@ -37,16 +38,19 @@ test/
 
 ## Data Flow
 
-1. Claude Code calls `cc-costline render` on every turn, passing session JSON via stdin
+1. Claude Code calls `cc-zhipu-hud render` on every turn, passing session JSON via stdin
 2. `render()` reads stdin JSON for session cost/model/context, reads transcript for token count
 3. Three data sources are refreshed inline with separate TTLs:
-   - **Local cost** (`~/.cc-costline/cache.json`): `collectCosts()` scans all `.jsonl` files (2-min TTL)
-   - **Usage API** (`/tmp/sl-claude-usage`): fetches `api.anthropic.com/api/oauth/usage` via curl (5-min retry, token-aware)
+   - **Local cost** (`~/.cc-zhipu-hud/cache.json`): `collectCosts()` scans all `.jsonl` files (2-min TTL)
+   - **Usage/Balance API**: detects proxy type and fetches accordingly
+     - Zhipu AI: `open.bigmodel.cn/api/paas/v4/billing/quota` via curl (5-min retry)
+     - Official: `api.anthropic.com/api/oauth/usage` via curl (5-min retry, token-aware)
    - **ccclub rank** (`/tmp/sl-ccclub-rank`): fetches `ccclub.dev/api/rank` via curl (5-min retry)
-4. `install` also sets `SessionEnd`/`Stop` hooks to run `cc-costline refresh` (legacy, kept for cache warmth)
+4. `install` also sets `SessionEnd`/`Stop` hooks to run `cc-zhipu-hud refresh` (legacy, kept for cache warmth)
 
 ## Key Design Decisions
 
+- **Smart API detection**: Automatically detects Zhipu AI proxy via `ANTHROPIC_BASE_URL` and shows balance instead of usage limits
 - **Split TTL caching**: Local cost uses 2-min TTL (`CACHE_TTL_MS`); external APIs use 5-min retry throttle (`API_RETRY_TTL_MS`). Local cost cache also refreshes immediately when transcript mtime is newer than cache
 - **Token-aware retry**: Usage API cache tracks the OAuth token prefix; when Claude Code rotates the token, retry fires immediately (new token = fresh rate limit quota)
 - **Resilient stale fallback**: API failures never overwrite cached data; `lastAttempt` is updated separately from `data`, so stale data persists across any number of failures
@@ -64,10 +68,10 @@ test/
 - `collector.test.ts`: collectCosts with mock jsonl — dedup (with/without requestId), 7d/30d split, nested dirs, cache tokens, model pricing, error handling
 - `render.test.ts`: render() output format, edge cases, transcript token counting, ANSI colors, period=both
 
-Not tested: getClaudeUsage, getCcclubRank (external API + keychain), CLI commands (hardcoded paths).
+Not tested: getClaudeUsage, getZhipuBalance, getCcclubRank (external API + keychain), CLI commands (hardcoded paths).
 
 ## Conventions
 
 - Keep zero runtime dependencies
 - All formatting functions should be pure and tested
-- Cache files go to `/tmp/sl-*`, config to `~/.cc-costline/`
+- Cache files go to `/tmp/sl-*`, config to `~/.cc-zhipu-hud/`

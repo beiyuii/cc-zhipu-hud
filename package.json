@@ -9,23 +9,36 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "test": "tsc && node --experimental-strip-types --no-warnings --test test/*.test.ts"
+    "test": "tsc && node --experimental-strip-types --no-warnings --test test/*.test.ts",
+    "prepublishOnly": "npm run build"
   },
   "files": [
-    "dist"
+    "dist",
+    "README.md"
   ],
   "engines": {
     "node": ">=22"
   },
   "keywords": [
     "claude-code",
+    "claude",
     "statusline",
     "zhipu",
     "glm",
-    "cost-tracking"
+    "bigmodel",
+    "cost-tracking",
+    "balance"
   ],
   "author": "beiyuii",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/beiyuii/cc-zhipu-hud.git"
+  },
+  "bugs": {
+    "url": "https://github.com/beiyuii/cc-zhipu-hud/issues"
+  },
+  "homepage": "https://github.com/beiyuii/cc-zhipu-hud#readme",
   "devDependencies": {
     "@types/node": "^25.5.0",
     "typescript": "^5.9.3"
