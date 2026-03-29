@@ -37,7 +37,8 @@ function readStdin(): string {
   const chunks: Buffer[] = [];
   let chunk: Buffer;
   // Node 22+ supports readable iterator on process.stdin
-  for (chunk of process.stdin as unknown as Iterable<Buffer>) {
+  const stdin = process.stdin as unknown as Iterable<Buffer>;
+  for (chunk of stdin) {
     chunks.push(chunk);
   }
   return Buffer.concat(chunks).toString("utf-8");
@@ -139,6 +140,12 @@ function config(args: string[]): void {
 
 function renderCmd(): void {
   const input = readStdin();
+  if (process.stdin.isTTY) {
+    // When called directly (e.g., cc-zhipu-hud render without stdin)
+    // This happens during setup verification
+    console.log("");
+    return;
+  }
   if (!input.trim()) return;
   const output = render(input);
   if (output) console.log(output);
