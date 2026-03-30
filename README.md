@@ -7,7 +7,8 @@
 ![cc-zhipu-hud screenshot](screenshot.png)
 
 ```
-14.6k ~ $2.42 / 40% by GLM-5 | Zhipu ¥12.5 · 500k tokens | 30d: $866
+[Model] │ Project │ git:(main)
+ Context ░░░░░░░░░░ 45% │ 5h:████░░░░ 40% │ 7d:██░░░░░░ 20%
 ```
 
 ## Why cc-zhipu-hud?
@@ -19,12 +20,12 @@ This is a fork of [cc-costline](https://github.com/Ventuss-OvO/cc-costline) spec
 | Feature | cc-costline | **cc-zhipu-hud** |
 |---------|-------------|------------------|
 | Claude usage limits | ✅ 5h/7d limits | ✅ (official API only) |
-| **Zhipu balance** | ❌ | ✅ **Cash + Token packages** |
+| **GLM Coding Plan** | ❌ | ✅ **5h/7d usage with progress bars** |
 | Local cost tracking | ✅ | ✅ |
 | ccclub leaderboard | ✅ | ✅ |
 | Smart API detection | ❌ | ✅ **Automatic mode switching** |
 
-When using Zhipu AI's `bigmodel.cn` proxy, cc-zhipu-hud automatically switches to show your account balance instead of Claude usage limits — which are irrelevant for proxy users.
+When using Zhipu AI's `bigmodel.cn` proxy, cc-zhipu-hud automatically shows your GLM Coding Plan usage instead of Claude usage limits.
 
 ## Features
 
@@ -32,10 +33,12 @@ When using Zhipu AI's `bigmodel.cn` proxy, cc-zhipu-hud automatically switches t
 
 | Segment | Example | Description |
 |---------|---------|-------------|
-| Tokens ~ Cost / Context | `14.6k ~ $2.42 / 40% by GLM-5` | Session token count, cost, context usage, and model |
-| **Zhipu Balance** | `Zhipu ¥12.5 · 500k tokens` | Zhipu AI cash balance + token package balance (proxy mode) |
-| Usage Limits | `5h: 45% / 7d: 8%` | Claude 5h/7d usage (official API mode only) |
-| Period Cost | `30d: $866` | Rolling 7d/30d cost total (configurable) |
+| Model | `[Opus 4.6 (1M)]` | Current model name |
+| Project | `cc-zhipu-hud` | Current project directory |
+| Git | `git:(main)` | Current branch (with `*` if dirty) |
+| Context | `░░░░░░░░░░ 45%` | Context window usage with progress bar |
+| 5h Usage | `5h:████░░░░ 40%` | 5-hour rolling usage (GLM Coding Plan or Claude) |
+| 7d Usage | `7d:██░░░░░░ 20%` | 7-day rolling usage |
 | Leaderboard | `#2/22 $67.0` | [ccclub](https://github.com/mazzzystar/ccclub) rank (if installed) |
 
 ### Smart Mode Detection
@@ -58,10 +61,7 @@ cc-zhipu-hud automatically detects your API configuration:
 ### Color Indicators
 
 - **Context & Usage** — Green (<60%) → Orange (60-79%) → Red (≥80%)
-- **Zhipu Cash** — Cyan
-- **Zhipu Token Packages** — Purple
 - **Leaderboard** — #1 Gold, #2 White, #3 Orange, others Cyan
-- **Cost** — Yellow
 
 ## Installation
 
@@ -113,12 +113,9 @@ npm i -g ccclub && ccclub init
 ## Commands
 
 ```bash
-cc-zhipu-hud install              # Set up Claude Code integration
-cc-zhipu-hud uninstall            # Remove integration
-cc-zhipu-hud refresh              # Refresh cost cache
-cc-zhipu-hud config --period 7d   # Show 7-day cost (default)
-cc-zhipu-hud config --period 30d  # Show 30-day cost
-cc-zhipu-hud config --period both # Show both periods
+cc-zhipu-hud install    # Set up Claude Code integration
+cc-zhipu-hud uninstall  # Remove integration
+cc-zhipu-hud refresh    # Refresh cost cache
 ```
 
 ## How It Works
@@ -126,10 +123,10 @@ cc-zhipu-hud config --period both # Show both periods
 1. **Install**: Configures `~/.claude/settings.json` with statusline command
 2. **Render** (on every turn):
    - Detects API type via `ANTHROPIC_BASE_URL`
-   - **Zhipu mode**: Fetches balance from `open.bigmodel.cn/api/paas/v4/billing/quota`
+   - **Zhipu mode**: Fetches GLM Coding Plan usage from `open.bigmodel.cn/api/paas/v4/billing/quota`
    - **Claude mode**: Fetches usage from `api.anthropic.com/api/oauth/usage`
    - Scans local `~/.claude/projects/**/*.jsonl` for cost tracking
-3. **Cache**: Data cached with 1-5 min TTL in `/tmp/sl-*`
+3. **Cache**: Data cached with 2-5 min TTL in `/tmp/sl-*`
 
 ## Development
 
