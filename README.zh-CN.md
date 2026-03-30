@@ -6,6 +6,21 @@
 
 从 [cc-costline](https://github.com/Ventuss-OvO/cc-costline) 分支而来，为使用 [智谱 AI](https://bigmodel.cn/) API 代理的用户增加了余额显示功能。
 
+## 运行前提（缺一则无法正常执行）
+
+> **本插件不能独立运行。** 只有 [Claude Code](https://docs.anthropic.com/en/docs/claude-code) 在每一轮对话里调用已配置的状态栏命令时，HUD 才会执行。以下任一项缺失，都会导致状态栏不生效或依赖接口的段落无法更新。
+
+| 必须具备 | 原因 |
+|----------|------|
+| **已安装并使用 Claude Code** | 宿主环境；没有 Claude Code 就没有状态栏入口。 |
+| **Node.js ≥ 22** | `cc-zhipu-hud` 命令由 Node 执行（见 `package.json` 的 `engines`）。 |
+| **已安装本包且成功执行 `cc-zhipu-hud install`** | `install` 会写入 `~/.claude/settings.json`，Claude Code 才知道要调用哪个命令；跳过则插件永远不会被调用。 |
+| **系统 `PATH` 中有 `curl`** | 智谱配额、Anthropic 用量、可选 ccclub 排行等请求均通过 `curl` 发起。 |
+| **可访问外网** | 上述 API 需能从本机访问。 |
+| **`ANTHROPIC_AUTH_TOKEN` 及对应模式下的环境变量** | 智谱代理：将 `ANTHROPIC_BASE_URL` 设为 bigmodel 地址，令牌填智谱 API Key；官方 Claude：由 Claude Code 提供 OAuth 令牌。没有有效令牌则用量/余额相关行无法刷新。 |
+
+**可选：** 若需要排行榜段落，需另行安装 [ccclub](https://github.com/mazzzystar/ccclub)。
+
 ## 功能
 
 ```
@@ -36,25 +51,62 @@
 
 ## 安装
 
+任选下面 **一种** 方式。两种路径最终都要执行 `cc-zhipu-hud install`，并 **新开 Claude Code 会话** 才能看到状态栏。
+
+### 1. AI 代理自动操作
+
+适用于由 IDE / 助手（如 Cursor、Claude Code）代为在终端执行命令的场景。
+
+1. **向代理说明目标**：从 `https://github.com/beiyuii/cc-zhipu-hud` 安装本仓库，执行构建与全局链接，再运行 `cc-zhipu-hud install`；并确认本机已满足 Node ≥ 22、`curl` 可用等 **运行前提**。
+2. **由代理执行**（在存放仓库的目录下）：
+
 ```bash
-# 克隆并安装
 git clone https://github.com/beiyuii/cc-zhipu-hud.git
 cd cc-zhipu-hud
 npm install
 npm run build
 npm link
-
-# 设置 Claude Code 集成
 cc-zhipu-hud install
 ```
 
-或从 npm 安装（发布后）：
+3. **密钥不要进对话**：不要把 API Key 粘贴到聊天里。请 **自行** 编辑 `~/.claude/settings.json`（见下文 **配置**），或在本地编辑器里确认代理提议的修改范围后再保存。
+4. **由你本人** 新开一个 Claude Code 会话，查看状态栏是否出现。
+
+若包已发布到 npm，也可让代理改为执行：
 
 ```bash
 npm i -g cc-zhipu-hud && cc-zhipu-hud install
 ```
 
-打开新的 Claude Code 会话即可看到增强状态栏。需要 Node.js >= 22。
+（省略克隆与本地构建。）
+
+### 2. 人类手动操作
+
+1. **先核对** 上文 **运行前提**：Node.js ≥ 22、`curl`、已安装 Claude Code。
+2. **在终端克隆并构建**：
+
+```bash
+git clone https://github.com/beiyuii/cc-zhipu-hud.git
+cd cc-zhipu-hud
+npm install
+npm run build
+npm link
+```
+
+3. **向 Claude Code 注册状态栏**：
+
+```bash
+cc-zhipu-hud install
+```
+
+4. **按需配置** `~/.claude/settings.json`（智谱用户见下文 **配置**）。
+5. **重启** Claude Code 或 **新开会话**，使状态栏生效。
+
+**从 npm 安装**（发布后）可将第 2–3 步替换为：
+
+```bash
+npm i -g cc-zhipu-hud && cc-zhipu-hud install
+```
 
 ## 配置
 
