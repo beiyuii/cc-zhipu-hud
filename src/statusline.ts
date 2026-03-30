@@ -346,19 +346,7 @@ export function render(input: string): string {
       line2Parts.push(`${weeklyColor}7d:${weeklyBar} ${glmUsage.weeklyPercent}%${r}`);
     }
 
-    // Zhipu token packages
-    const zhipuPackages = getZhipuBalance();
-    if (zhipuPackages && zhipuPackages.length > 0) {
-      let totalBalance = 0;
-      let totalMagnitude = 0;
-      for (const pkg of zhipuPackages) {
-        totalBalance += pkg.tokenBalance;
-        totalMagnitude += pkg.tokensMagnitude;
-      }
-      const balance = formatTokens(totalBalance);
-      const total = formatTokens(totalMagnitude);
-      line2Parts.push(`${FG_CYAN}Tokens${r} ${balance}/${total}`);
-    }
+    // Zhipu token packages hidden (too long)
   } else {
     // Claude usage (only if not using Zhipu)
     const claudeUsage = getClaudeUsage();
@@ -375,17 +363,7 @@ export function render(input: string): string {
     }
   }
 
-  // Period cost
-  if (cache) {
-    const period = config.period || "30d";
-    if (period === "both") {
-      line2Parts.push(`${y}7d:${formatCost(cache.cost7d)}${r}`);
-      line2Parts.push(`${y}30d:${formatCost(cache.cost30d)}${r}`);
-    } else {
-      const periodCost = period === "7d" ? cache.cost7d : cache.cost30d;
-      line2Parts.push(`${y}${period}:${formatCost(periodCost)}${r}`);
-    }
-  }
+  // Period cost hidden (too long)
 
   // ccclub rank (append to line 2)
   const ccclubRank = getCcclubRank();

@@ -144,7 +144,11 @@ export function getGlmCodingPlanUsage(): GlmCodingPlanUsage | null {
     // Check if API returned success
     if (json.code !== 200 || !json.data?.limits) return staleData;
 
-    // Parse the limits array to find 5-hour TIME_LIMIT and weekly TOKENS_LIMIT
+    // Parse the limits array to find 5-hour and weekly limits
+    // Based on Zhipu website code:
+    // - TOKENS_LIMIT unit=3 = "每5小时使用额度" (5-hour rolling limit)
+    // - TOKENS_LIMIT unit=6 = "每周使用额度" (weekly limit)
+    // - TIME_LIMIT unit=5 = "MCP 每月额度" (MCP monthly limit, not used here)
     const limits = json.data.limits;
     let fiveHourPercent = 0;
     let weeklyPercent = 0;
@@ -152,8 +156,8 @@ export function getGlmCodingPlanUsage(): GlmCodingPlanUsage | null {
     let weeklyResetsAt: number | undefined;
 
     for (const limit of limits) {
-      // TIME_LIMIT with unit=5 is the 5-hour rolling limit
-      if (limit.type === "TIME_LIMIT" && limit.unit === 5) {
+      // TOKENS_LIMIT with unit=3 is the 5-hour rolling limit
+      if (limit.type === "TOKENS_LIMIT" && limit.unit === 3) {
         fiveHourPercent = Math.round(limit.percentage ?? 0);
         if (limit.nextResetTime) {
           const ts = typeof limit.nextResetTime === "string"
@@ -162,8 +166,8 @@ export function getGlmCodingPlanUsage(): GlmCodingPlanUsage | null {
           if (!isNaN(ts) && ts > now) fiveHourResetsAt = ts;
         }
       }
-      // TOKENS_LIMIT with unit=3 is the weekly (7-day) limit
-      if (limit.type === "TOKENS_LIMIT" && limit.unit === 3) {
+      // TOKENS_LIMIT with unit=6 is the weekly (7-day) limit
+      if (limit.type === "TOKENS_LIMIT" && limit.unit === 6) {
         weeklyPercent = Math.round(limit.percentage ?? 0);
         if (limit.nextResetTime) {
           const ts = typeof limit.nextResetTime === "string"

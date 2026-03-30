@@ -9,29 +9,30 @@
 ## 功能
 
 ```
-14.6k ~ $2.42 / 40% by GLM-5 | Zhipu ¥12.5 · 500k tokens | 30d: $866
+[Model] │ Project │ git:(main)
+ Context ░░░░░░░░░░ 45% │ 5h:████░░░░ 40% │ 7d:██░░░░░░ 20%
 ```
 
 | 模块 | 示例 | 说明 |
 |------|------|------|
-| Token ~ 费用 / 上下文 | `14.6k ~ $2.42 / 40% by GLM-5` | 会话 token 数量、费用、上下文使用率和模型 |
-| **智谱余额** | `Zhipu ¥12.5 · 500k tokens` | **新增！** 使用 bigmodel.cn 代理时显示智谱账户余额 |
-| 使用限额 | `5h: 45% / 7d: 8%` | Claude 5 小时和 7 天使用率（仅官方 API 显示） |
-| 周期费用 | `30d: $866` | 滚动费用合计（可配置：7d、30d 或 both） |
+| 模型 | `[Opus 4.6 (1M)]` | 当前使用的模型名称 |
+| 项目 | `cc-zhipu-hud` | 当前项目目录 |
+| Git | `git:(main)` | 当前分支（有未提交更改时显示 `*`） |
+| 上下文 | `░░░░░░░░░░ 45%` | 上下文窗口使用率，带进度条 |
+| 5小时使用率 | `5h:████░░░░ 40%` | 5小时滚动使用率（GLM Coding Plan 或 Claude） |
+| 7天使用率 | `7d:██░░░░░░ 20%` | 7天滚动使用率 |
 | 排行榜 | `#2/22 $67.0` | [ccclub](https://github.com/mazzzystar/ccclub) 排名（需安装） |
 
 ### 智能 API 检测
 
-- **智谱 AI 用户**：显示账户余额（现金 + 资源包），而非使用限额
-- **官方 API 用户**：照常显示 Claude 5h/7d 使用限额
+- **智谱 AI 用户**：显示 GLM Coding Plan 的 5h/7d 使用率
+- **官方 API 用户**：显示 Claude 5h/7d 使用限额
 - 根据配置的 `ANTHROPIC_BASE_URL` 自动检测
 
 ### 颜色规则
 
-- **上下文和使用限额** — 绿色（< 60%）→ 橙色（60-79%）→ 红色（≥ 80%）
-- **智谱余额** — 现金青色，资源包紫色
+- **上下文和使用率** — 绿色（< 60%）→ 橙色（60-79%）→ 红色（≥ 80%）
 - **排行榜排名** — 第 1 名金色，第 2 名白色，第 3 名橙色，其余青色
-- **周期费用** — 黄色
 
 ## 安装
 
@@ -75,23 +76,20 @@ HUD 会自动检测智谱代理并显示你的余额。
 ## 命令
 
 ```bash
-cc-zhipu-hud install              # 设置 Claude Code 集成
-cc-zhipu-hud uninstall            # 从设置中移除
-cc-zhipu-hud refresh              # 手动重新计算费用缓存
-cc-zhipu-hud config --period 7d   # 显示 7 天费用（默认）
-cc-zhipu-hud config --period 30d  # 显示 30 天费用
-cc-zhipu-hud config --period both # 同时显示两个周期
+cc-zhipu-hud install    # 设置 Claude Code 集成
+cc-zhipu-hud uninstall  # 从设置中移除
+cc-zhipu-hud refresh    # 手动重新计算费用缓存
 ```
 
 ## 工作原理
 
-1. `install` 配置 `~/.claude/settings.json` — 设置状态栏命令并添加会话结束 hook。
+1. `install` 配置 `~/.claude/settings.json` — 设置状态栏命令
 2. `render` 在每次对话时被 Claude Code 调用：
    - 检测是否使用智谱 AI 代理（通过 `ANTHROPIC_BASE_URL`）
-   - **智谱模式**：从 `open.bigmodel.cn/api/paas/v4/billing/quota` 获取余额
+   - **智谱模式**：从 `open.bigmodel.cn/api/paas/v4/billing/quota` 获取 GLM Coding Plan 使用率
    - **Claude 模式**：从 `api.anthropic.com/api/oauth/usage` 获取使用量
    - 本地费用追踪扫描 `~/.claude/projects/**/*.jsonl`
-3. 余额/使用量数据缓存于 `/tmp/sl-*`，TTL 为 1-5 分钟。
+3. 使用率数据缓存于 `/tmp/sl-*`，TTL 为 2-5 分钟。
 
 ## 开发
 
