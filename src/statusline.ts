@@ -1,6 +1,6 @@
 import { readFileSync, existsSync, statSync, writeFileSync, unlinkSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { homedir } from "node:os";
+import { join, dirname, sep } from "node:path";
+import { homedir, tmpdir } from "node:os";
 import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { readCache, writeCache, readConfig } from "./cache.js";
@@ -126,7 +126,7 @@ function getGitStatus(): { branch: string; dirty: boolean } | null {
 function getCcclubRank(): { rank: number; total: number; cost: number } | null {
   const configPath = join(homedir(), ".ccclub", "config.json");
   if (!existsSync(configPath)) return null;
-  const cacheFile = "/tmp/sl-ccclub-rank";
+  const cacheFile = join(tmpdir(), "sl-ccclub-rank");
   const now = Date.now();
   let staleData: { rank: number; total: number; cost: number } | null = null;
   let lastAttempt = 0;
@@ -169,8 +169,8 @@ export function rankColor(rank: number): string {
 
 // Claude usage fetcher — token-aware cache: detects token rotation to retry immediately
 function getClaudeUsage(): { fiveHour: number; sevenDay: number; fiveHourResetsAt?: number } | null {
-  const cacheFile = "/tmp/sl-claude-usage";
-  const hitFile = "/tmp/sl-claude-usage-hit";
+  const cacheFile = join(tmpdir(), "sl-claude-usage");
+  const hitFile = join(tmpdir(), "sl-claude-usage-hit");
   const now = Date.now();
   let staleData: { fiveHour: number; sevenDay: number; fiveHourResetsAt?: number } | null = null;
   let lastAttempt = 0;
@@ -184,8 +184,12 @@ function getClaudeUsage(): { fiveHour: number; sevenDay: number; fiveHourResetsA
     } catch { }
   }
 
-  // Get current token
+  // Get current token (macOS only - skip on Windows)
   let accessToken = "";
+  const platform = process.platform;
+  if (platform !== "darwin") {
+    return staleData;
+  }
   try {
     const username = process.env.USER || process.env.USERNAME;
     const keychainCmd = `security find-generic-password -s "Claude Code-credentials" -a "${username}" -w 2>/dev/null`;
@@ -213,7 +217,7 @@ function getClaudeUsage(): { fiveHour: number; sevenDay: number; fiveHourResetsA
     const response = execSync(curlCmd, { encoding: "utf-8", timeout: 5000 });
     if (!response) return staleData;
     const data = JSON.parse(response);
-    try { writeFileSync("/tmp/sl-claude-usage-raw", JSON.stringify(data, null, 2), "utf-8"); } catch {}
+    try { writeFileSync(join(tmpdir(), "sl-claude-usage-raw"), JSON.stringify(data, null, 2), "utf-8"); } catch {}
     const parseUtil = (val: any): number => {
       if (typeof val === "number") return Math.round(val);
       if (typeof val === "string") return Math.round(parseFloat(val.replace("%", "")));
@@ -262,10 +266,18 @@ export function render(input: string): string {
     return "";
   }
 
+  // Debug: write raw input to inspect available fields
+  try { writeFileSync(join(tmpdir(), "sl-render-debug.json"), JSON.stringify(JSON.parse(input), null, 2), "utf-8"); } catch {}
+
   // Session data from Claude Code stdin
   const cost = data.cost?.total_cost_usd ?? 0;
   const modelName = (data.model?.display_name ?? "—").replace(/\s*\((\d+[KMB])\s+context\)/i, " ($1)");
   const contextPct = Math.floor(data.context_window?.used_percentage ?? 0);
+
+  // Calculate total tokens from context_window
+  const totalInputTokens = data.context_window?.total_input_tokens ?? 0;
+  const totalOutputTokens = data.context_window?.total_output_tokens ?? 0;
+  const finalTokens = totalInputTokens + totalOutputTokens;
 
   const transcriptPath = data.transcript_path ?? "";
 
@@ -313,8 +325,8 @@ export function render(input: string): string {
   // Model badge
   line1Parts.push(`${FG_CYAN}[${modelName}]${r}`);
 
-  // Project path (last directory only)
-  const projectPath = process.cwd().split("/").pop() || ".";
+  // Project path (last directory only) - use cross-platform approach
+  const projectPath = process.cwd().split(sep).pop() || ".";
   line1Parts.push(`${FG_YELLOW}${projectPath}${r}`);
 
   // Git status
@@ -327,9 +339,10 @@ export function render(input: string): string {
   // Line 2: Context ███░░ 45% │ Balance │ Cost
   const line2Parts: string[] = [];
 
-  // Context progress bar
+  // Context progress bar with token count
   const bar = formatBar(contextPct);
-  line2Parts.push(`${DIM}Context${r} ${cx}${bar}${r} ${cx}${contextPct}%${r}`);
+  const tokenStr = finalTokens > 0 ? formatTokens(finalTokens) : "";
+  line2Parts.push(`${DIM}Context${r} ${cx}${bar}${r} ${cx}${contextPct}%${tokenStr ? ` ${cx}${tokenStr}${r}` : ""}`);
 
   // GLM Coding Plan usage (if using Zhipu proxy)
   if (isZhipuMode()) {

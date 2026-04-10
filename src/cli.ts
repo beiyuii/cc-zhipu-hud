@@ -35,7 +35,8 @@ function saveSettings(settings: any): void {
 
 function readStdin(): string {
   try {
-    return readFileSync("/dev/stdin", "utf-8");
+    // Use file descriptor 0 for cross-platform stdin reading
+    return readFileSync(0, "utf-8");
   } catch {
     return "";
   }
