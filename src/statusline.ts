@@ -266,9 +266,6 @@ export function render(input: string): string {
     return "";
   }
 
-  // Debug: write raw input to inspect available fields
-  try { writeFileSync(join(tmpdir(), "sl-render-debug.json"), JSON.stringify(JSON.parse(input), null, 2), "utf-8"); } catch {}
-
   // Session data from Claude Code stdin
   const cost = data.cost?.total_cost_usd ?? 0;
   const modelName = (data.model?.display_name ?? "—").replace(/\s*\((\d+[KMB])\s+context\)/i, " ($1)");
