@@ -219,6 +219,14 @@ test/
 - [ ] 自定义 API 端点支持
 - [ ] 更多语言翻译
 
+## 贡献者
+
+感谢以下开发者：
+
+- [Ventuss-OvO](https://github.com/Ventuss-OvO) — 原作者，创建了 [cc-costline](https://github.com/Ventuss-OvO/cc-costline)，本项目的基础
+- [beiyuii](https://github.com/beiyuii) — 智谱 AI / GLM 集成、插件系统、缓存、项目维护
+- [yinyajiang](https://github.com/yinyajiang) — Windows 跨平台支持
+
 ## 贡献
 
 欢迎提交 Issue 和 Pull Request。提交 PR 前请：

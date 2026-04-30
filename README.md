@@ -219,6 +219,14 @@ test/
 - [ ] Custom API endpoint support
 - [ ] More language translations
 
+## Contributors
+
+Thanks goes to these wonderful people:
+
+- [Ventuss-OvO](https://github.com/Ventuss-OvO) — original [cc-costline](https://github.com/Ventuss-OvO/cc-costline), the foundation of this project
+- [beiyuii](https://github.com/beiyuii) — Zhipu AI / GLM integration, plugin system, caching, and project maintenance
+- [yinyajiang](https://github.com/yinyajiang) — Windows cross-platform support
+
 ## Contributing
 
 Issues and pull requests are welcome. Before submitting a PR, please:
