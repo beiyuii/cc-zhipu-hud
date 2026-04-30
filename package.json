@@ -1,7 +1,7 @@
 {
   "name": "cc-zhipu-hud",
   "version": "0.1.0",
-  "description": "Enhanced statusline for Claude Code with Zhipu AI/GLM balance tracking",
+  "description": "Enhanced statusline for Claude Code with Zhipu AI/GLM balance tracking — displays context usage, token costs, GLM Coding Plan quota, and token balance in real-time",
   "type": "module",
   "bin": {
     "cc-zhipu-hud": "dist/cli.js"

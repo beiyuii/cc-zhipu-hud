@@ -1,0 +1,33 @@
+{
+  "name": "cc-zhipu-hud",
+  "version": "0.1.0",
+  "description": "Enhanced statusline for Claude Code with Zhipu AI/GLM balance tracking",
+  "author": {
+    "name": "beiyuii"
+  },
+  "homepage": "https://github.com/beiyuii/cc-zhipu-hud#readme",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/beiyuii/cc-zhipu-hud.git"
+  },
+  "keywords": [
+    "claude-code",
+    "statusline",
+    "zhipu",
+    "glm",
+    "bigmodel",
+    "cost-tracking",
+    "balance",
+    "hud"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=22"
+  },
+  "install": {
+    "npm": "npm i -g cc-zhipu-hud && cc-zhipu-hud install"
+  },
+  "hooks": {
+    "postinstall": "cc-zhipu-hud install"
+  }
+}
