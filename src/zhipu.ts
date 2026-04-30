@@ -1,8 +1,10 @@
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { execSync } from "node:child_process";
 
-const ZHIPU_CACHE_FILE = "/tmp/sl-zhipu-balance";
-const GLM_USAGE_CACHE_FILE = "/tmp/sl-glm-usage";
+const ZHIPU_CACHE_FILE = join(tmpdir(), "sl-zhipu-balance");
+const GLM_USAGE_CACHE_FILE = join(tmpdir(), "sl-glm-usage");
 const API_RETRY_TTL_MS = 300_000; // 5 minutes
 
 /**
